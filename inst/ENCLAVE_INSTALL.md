@@ -5,7 +5,7 @@ can be installed without contacting a package repository. Oracle and Parquet
 features use packages normally supplied by the enclave environment.
 
 ```r
-install.packages("reactextract_0.1.3.tar.gz", repos = NULL, type = "source")
+install.packages("reactextract_0.1.4.tar.gz", repos = NULL, type = "source")
 
 stopifnot(getRversion() >= "4.4.0", getRversion() < "4.5.0")
 stopifnot(requireNamespace("DBI", quietly = TRUE))

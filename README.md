@@ -16,7 +16,7 @@ vaccination intervals, test thresholds, or other new measures.
 Use the offline source bundle prepared outside the enclave:
 
 ```r
-install.packages("reactextract_0.1.3.tar.gz", repos = NULL, type = "source")
+install.packages("reactextract_0.1.4.tar.gz", repos = NULL, type = "source")
 ```
 
 Oracle extraction also requires the enclave's existing `DBI`, `odbc`, Oracle
@@ -135,3 +135,8 @@ disclosure review is still required before removal.
 Package code is MIT licensed. The bundled dictionary metadata is CC BY 4.0 and
 retains its attribution and checksums inside
 `inst/extdata/dictionary.tar.gz`.
+
+Concept links, harmonisation rules, and reviewed source-availability notes are
+maintained once in [`react_wiki`](https://github.com/mathzero/react_wiki).
+This package verifies and applies a pinned release of that dictionary; it does
+not keep a separate set of study-specific decisions.

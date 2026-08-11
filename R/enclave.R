@@ -87,22 +87,18 @@
 }
 
 .read_confirmed_unavailable <- function() {
-  path <- system.file(
-    "extdata", "oracle_unavailable_fields.csv",
-    package = "reactextract"
-  )
-  if (!nzchar(path)) {
-    stop("The confirmed-unavailable field registry is missing.", call. = FALSE)
-  }
-  registry <- .read_literal_csv(path)
+  registry <- react_dictionary()$oracle_unavailable_fields
   required <- c(
     "round_id", "source_object", "variable", "confirmed_by",
     "confirmed_date", "reason"
   )
-  if (!identical(names(registry), required) || anyDuplicated(
+  if (is.null(registry) || !identical(names(registry), required) || anyDuplicated(
       registry[c("round_id", "source_object", "variable")]
     )) {
-    stop("The confirmed-unavailable field registry is invalid.", call. = FALSE)
+    stop(
+      "The bundled confirmed-unavailable field registry is invalid.",
+      call. = FALSE
+    )
   }
   registry
 }

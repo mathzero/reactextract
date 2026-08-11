@@ -1,3 +1,9 @@
+# reactextract 0.1.4
+
+- Moves the confirmed Oracle field-availability notes into the pinned
+  `react_wiki` dictionary bundle, alongside concept links and harmonisation
+  rules, so study-specific decisions have one source of truth.
+
 # reactextract 0.1.3
 
 - Fixes Oracle extraction for requested rounds where the selected concept was
