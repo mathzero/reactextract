@@ -1,0 +1,12 @@
+.Rhistory
+.RData
+.Ruserdata
+.DS_Store
+.Rproj.user/
+renv/library/
+renv/staging/
+renv/python/
+renv/sandbox/
+dist/
+*.tar.gz
+*.Rcheck/

@@ -1,0 +1,32 @@
+name: R package validation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      R_VERSION: "4.4.1"
+      _R_CHECK_FORCE_SUGGESTS_: "false"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ env.R_VERSION }}
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-renv@v2
+      - name: Verify dictionary, test, and check package
+        run: make check
+      - name: Build offline source bundle
+        run: Rscript scripts/build_offline_bundle.R
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reactextract-offline-source
+          path: dist/reactextract-0.1.0-offline
+          if-no-files-found: error

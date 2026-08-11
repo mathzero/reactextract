@@ -1,0 +1,29 @@
+Package: reactextract
+Title: Extract Reviewed REACT Study Metadata and Data
+Version: 0.1.3
+Authors@R: person("mathzero", email = "mathzero@users.noreply.github.com", role = c("aut", "cre"))
+Description: Extracts REACT-1 and REACT-2 variables from caller-managed
+    Oracle connections or round files using a pinned, reviewed REACT metadata
+    dictionary. Exact source values are retained and only approved mappings may
+    produce harmonised values. Aggregate profiling tools prepare disclosure-aware
+    metadata for later synthetic-data work without generating synthetic records.
+License: MIT + file LICENSE
+URL: https://github.com/mathzero/reactextract
+BugReports: https://github.com/mathzero/reactextract/issues
+Depends:
+    R (>= 4.4.0)
+Suggests:
+    arrow,
+    DBI,
+    digest,
+    odbc,
+    readr,
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3
+Config/reactextract/dictionary-release: v1.0.0-rc1
+Config/reactextract/dictionary-manifest-sha256: 7f6731181c136eaa555041a80c55077446ecfaa49f459b7fb105ba1fc4ea4ad9
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.1.0
+RoxygenNote: 7.3.2

@@ -1,0 +1,20 @@
+# Copy this file to connection.R inside the enclave. Do not put credentials in
+# this file. Supply them through the enclave's approved environment mechanism.
+required <- c("REACT_DB_USER", "REACT_DB_PASSWORD")
+missing <- required[!nzchar(Sys.getenv(required))]
+if (length(missing) > 0L) {
+  stop("Missing required environment variable(s): ", paste(missing, collapse = ", "))
+}
+
+con <- DBI::dbConnect(
+  odbc::odbc(),
+  Driver = Sys.getenv("REACT_DB_DRIVER", "Oracle in instantclient_23_0"),
+  DBQ = Sys.getenv(
+    "REACT_DB_DBQ",
+    "se-enclaves-db02.sm.med.ic.ac.uk:1521/react"
+  ),
+  SVC = Sys.getenv("REACT_DB_SERVICE", "REACT_V"),
+  UID = Sys.getenv("REACT_DB_USER"),
+  PWD = Sys.getenv("REACT_DB_PASSWORD"),
+  timeout = 10
+)

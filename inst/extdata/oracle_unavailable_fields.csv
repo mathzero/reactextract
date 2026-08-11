@@ -1,0 +1,5 @@
+round_id,source_object,variable,confirmed_by,confirmed_date,reason
+react1.r19,REACT1_R19_V,PREVREACT,mathzero,2026-08-11,Confirmed absent from the enclave view after a zero-row column-name check
+react1.r19,REACT1_R19_V,PREVREACTID1,mathzero,2026-08-11,Confirmed absent from the enclave view after a zero-row column-name check
+react1.r19,REACT1_R19_V,PREVREACTID2,mathzero,2026-08-11,Confirmed absent from the enclave view after a zero-row column-name check
+react1.r19,REACT1_R19_V,PREVREACTID3,mathzero,2026-08-11,Confirmed absent from the enclave view after a zero-row column-name check

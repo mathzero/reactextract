@@ -1,0 +1,11 @@
+^\.github$
+^\.gitignore$
+^\.Renviron$
+^\.Rprofile$
+^Makefile$
+^README\.Rmd$
+^renv$
+^renv\.lock$
+^scripts$
+^dist$
+^reactextract\.Rproj$
