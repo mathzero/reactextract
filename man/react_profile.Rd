@@ -15,7 +15,7 @@ react_profile(result, pairs = NULL)
 Aggregate profile tables with no respondent identifiers.
 }
 \description{
-Harmonised values are used where an approved transform exists; otherwise the
-exact occurrence is profiled as a raw-only feature. Uncoded character text is
-represented only by length bands and is never retained in the profile.
+Approved transforms are used where available; otherwise source-preserving
+cleaned values are profiled. Uncoded character text is represented only by
+length bands and is never retained in the profile.
 }

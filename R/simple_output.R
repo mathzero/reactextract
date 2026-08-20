@@ -25,7 +25,7 @@
   )]
 }
 
-.add_simple_column <- function(output, values, name) {
+.add_simple_column <- function(output, values, name, observation_lookup = NULL) {
   if (anyDuplicated(values$observation_id)) {
     stop(
       "Cannot make the simple output because more than one value exists for `",
@@ -36,7 +36,11 @@
   }
   column <- .simple_values(values)
   aligned <- rep(column[NA_integer_], nrow(output))
-  index <- match(values$observation_id, output$observation_id)
+  index <- if (is.null(observation_lookup)) {
+    match(values$observation_id, output$observation_id)
+  } else {
+    unname(observation_lookup[values$observation_id])
+  }
   aligned[index[!is.na(index)]] <- column[!is.na(index)]
   output[[name]] <- aligned
   output
@@ -44,28 +48,57 @@
 
 .make_simple_raw_data <- function(observations, raw_values) {
   output <- .simple_identifiers(observations)
-  for (variable in unique(raw_values$raw_variable)) {
-    values <- raw_values[raw_values$raw_variable == variable, , drop = FALSE]
-    output <- .add_simple_column(output, values, variable)
+  if (nrow(raw_values) == 0L) {
+    return(output)
+  }
+  observation_lookup <- stats::setNames(
+    seq_len(nrow(observations)), observations$observation_id
+  )
+  groups <- split(
+    seq_len(nrow(raw_values)),
+    factor(raw_values$raw_variable, levels = unique(raw_values$raw_variable)),
+    drop = TRUE
+  )
+  for (variable in names(groups)) {
+    values <- raw_values[groups[[variable]], , drop = FALSE]
+    output <- .add_simple_column(
+      output, values, variable,
+      observation_lookup = observation_lookup
+    )
   }
   output
 }
 
 .make_simple_harmonised_data <- function(observations, harmonised_values,
-                                         requested_concepts = NULL) {
+                                         requested_columns = NULL) {
   output <- .simple_identifiers(observations)
-  concepts <- unique(c(requested_concepts, harmonised_values$concept_id))
-  concepts <- concepts[!is.na(concepts) & nzchar(concepts)]
-  for (concept in concepts) {
-    values <- harmonised_values[
-      harmonised_values$concept_id == concept,
-      ,
-      drop = FALSE
-    ]
-    if (nrow(values) == 0L) {
-      output[[concept]] <- rep(NA, nrow(output))
+  columns <- unique(c(requested_columns, harmonised_values$output_column))
+  columns <- columns[!is.na(columns) & nzchar(columns)]
+  observation_lookup <- stats::setNames(
+    seq_len(nrow(observations)), observations$observation_id
+  )
+  groups <- if (nrow(harmonised_values) == 0L) {
+    list()
+  } else {
+    split(
+      seq_len(nrow(harmonised_values)),
+      factor(
+        harmonised_values$output_column,
+        levels = unique(harmonised_values$output_column)
+      ),
+      drop = TRUE
+    )
+  }
+  for (column_name in columns) {
+    indices <- groups[[column_name]]
+    if (is.null(indices)) {
+      output[[column_name]] <- rep(NA, nrow(output))
     } else {
-      output <- .add_simple_column(output, values, concept)
+      values <- harmonised_values[indices, , drop = FALSE]
+      output <- .add_simple_column(
+        output, values, column_name,
+        observation_lookup = observation_lookup
+      )
     }
   }
   output

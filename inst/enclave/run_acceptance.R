@@ -38,14 +38,21 @@ main <- function() {
   ]
   preflight_passed <- preflight_status %in% c("passed", "passed_with_notes")
 
-  smoke_rounds <- c("react1.r01", "react2.r01")
+  smoke_rounds <- c("react1.r10", "react2.r01")
+  smoke_concepts <- c(
+    "health.preexisting.overweight",
+    "health.acute_symptoms.highest_temperature_reading",
+    "infection_measurement.testing_history.previous_antibody_test_history"
+  )
   smoke_status <- "skipped"
   smoke_message <- "Smoke extraction was skipped because preflight requires attention."
   if (preflight_passed) {
     smoke <- reactextract::react_extract(
       source,
-      families = "health/preexisting-conditions",
-      rounds = smoke_rounds
+      families = "all",
+      rounds = smoke_rounds,
+      concepts = smoke_concepts,
+      progress = TRUE
     )
     count_by_round <- function(data) {
       counts <- table(factor(data$round_id, levels = smoke_rounds))
@@ -56,6 +63,11 @@ main <- function() {
       observation_count = count_by_round(smoke$observations),
       raw_value_count = count_by_round(smoke$raw_values),
       harmonised_value_count = count_by_round(smoke$harmonised_values),
+      cleaned_output_column_count = rep(
+        length(unique(smoke$column_dictionary$output_column)),
+        length(smoke_rounds)
+      ),
+      requested_concept_count = rep(length(smoke_concepts), length(smoke_rounds)),
       stringsAsFactors = FALSE
     )
     utils::write.csv(
@@ -71,11 +83,13 @@ main <- function() {
       row.names = FALSE, na = ""
     )
     smoke_status <- if (all(smoke_summary$observation_count > 0L) &&
-        all(smoke_summary$raw_value_count > 0L)) "passed" else "failed"
+        all(smoke_summary$raw_value_count > 0L) &&
+        all(smoke_summary$harmonised_value_count > 0L) &&
+        all(smoke_summary$cleaned_output_column_count > 0L)) "passed" else "failed"
     smoke_message <- if (smoke_status == "passed") {
       "Row-level smoke results were discarded; only aggregate diagnostics were written."
     } else {
-      "One or both smoke rounds returned no observations or raw values."
+      "One or both representative rounds returned no observations or raw values."
     }
     rm(smoke)
     invisible(gc())

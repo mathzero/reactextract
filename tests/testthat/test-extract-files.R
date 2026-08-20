@@ -151,5 +151,7 @@ test_that("repeated extraction has equivalent data and manifests", {
   source <- react_files(preexisting_rounds(3), crosswalk = fixture_crosswalk(3))
   first <- react_extract(source, "health/preexisting-conditions", "react1.r01")
   second <- react_extract(source, "health/preexisting-conditions", "react1.r01")
-  expect_identical(first, second)
+  expect_identical(first[names(first) != "manifest"], second[names(second) != "manifest"])
+  stable_manifest <- function(x) x[!startsWith(x$key, "timing_"), , drop = FALSE]
+  expect_identical(stable_manifest(first$manifest), stable_manifest(second$manifest))
 })

@@ -276,6 +276,9 @@
   object <- registry$crosswalk_object[[1]]
   passcode <- registry$crosswalk_passcode_field[[1]]
   subject <- registry$crosswalk_subject_field[[1]]
+  if (inherits(source, "react_synthetic_source")) {
+    return(list(data = NULL, issues = .empty_issues()))
+  }
   if (inherits(source, "react_file_source")) {
     data <- tryCatch(.read_crosswalk_source(source$crosswalk), error = identity)
     if (inherits(data, "error")) {
@@ -462,15 +465,18 @@
     return(observations)
   }
   usable <- which(!is.na(observations$SUBJECT_ID) & nzchar(observations$SUBJECT_ID))
-  groups <- split(usable, observations$SUBJECT_ID[usable])
-  for (indices in groups) {
-    ordered <- indices[order(
-      observations$display_order[indices],
-      observations$source_row[indices]
-    )]
-    observations$visit_number[ordered] <- seq_along(ordered)
-    observations$total_visits[ordered] <- length(ordered)
+  if (length(usable) == 0L) {
+    return(observations)
   }
+  ordered <- usable[order(
+    observations$SUBJECT_ID[usable],
+    observations$display_order[usable],
+    observations$source_row[usable],
+    method = "radix"
+  )]
+  subject_runs <- rle(observations$SUBJECT_ID[ordered])$lengths
+  observations$visit_number[ordered] <- sequence(subject_runs)
+  observations$total_visits[ordered] <- rep.int(subject_runs, subject_runs)
   observations
 }
 
@@ -500,41 +506,80 @@
 #'   [react_families()].
 #' @param rounds `all`, round IDs, or survey IDs.
 #' @param concepts Optional exact concept IDs used as an additional filter.
-#' @param progress Show round-by-round progress. Defaults to on in interactive R
-#'   sessions and off in scripts.
-#' @return A named list. `data` is the main cleaned table with one concept per
-#'   column; `raw_data` contains one column per exact source field. Detailed long
-#'   tables remain available for provenance.
+#' @param progress Show round and processing-stage progress. Updates include
+#'   requested fields, records received, and elapsed time. Defaults to on in
+#'   interactive R sessions and off in scripts.
+#' @return A named list. `data` is the main cleaned table. Concepts with at most
+#'   one field per round use one concept column; genuine multi-item concepts use
+#'   separate `concept__field__EXACT_RAW_FIELD` columns. `column_dictionary` explains
+#'   those columns, and `raw_data` retains one column per exact source field.
+#'   Detailed long tables remain available for provenance.
 #' @export
 react_extract <- function(source, families = "all", rounds = "all", concepts = NULL,
                           progress = interactive()) {
   if (!inherits(source, "react_source")) {
-    stop("`source` must be created by `react_oracle()` or `react_files()`.", call. = FALSE)
+    stop("`source` must be created by `react_oracle()`, `react_files()`, or `react_synthetic()`.", call. = FALSE)
   }
+  if (!is.logical(progress) || length(progress) != 1L || is.na(progress)) {
+    stop("`progress` must be TRUE or FALSE.", call. = FALSE)
+  }
+  total_started <- .extract_clock()
+  timings <- numeric()
+  round_timings <- numeric()
+
+  stage_started <- .extract_clock()
+  .progress_stage_start(progress, "loading dictionary and selecting fields")
   dictionary <- react_dictionary()
   selected <- .select_occurrences(dictionary, families, rounds, concepts)
   requested_rounds <- .resolve_rounds(rounds, dictionary$rounds)
+  selected_output_plan <- dictionary$concept_output_columns[
+    dictionary$concept_output_columns$occurrence_id %in% selected$occurrence_id,
+    ,
+    drop = FALSE
+  ]
+  result_output_plan <- selected_output_plan
+  requested_output_columns <- unique(selected_output_plan$output_column)
+  generation_occurrences <- if (inherits(source, "react_synthetic_source")) {
+    .synthetic_generation_occurrences(dictionary, selected, requested_rounds)
+  } else {
+    selected
+  }
+  if (!is.null(concepts)) {
+    missing_concepts <- setdiff(concepts, selected_output_plan$concept_id)
+    if (length(missing_concepts) > 0L) {
+      missing_plan <- dictionary$concept_output_columns[
+        dictionary$concept_output_columns$concept_id %in% missing_concepts,
+        ,
+        drop = FALSE
+      ]
+      result_output_plan <- rbind(result_output_plan, missing_plan)
+      requested_output_columns <- unique(c(
+        requested_output_columns,
+        missing_plan$output_column
+      ))
+    }
+  }
   registry <- if (inherits(source, "react_oracle_source")) {
     source$registry
   } else {
     .validate_registry(dictionary$source_registry)
   }
-  if (!is.logical(progress) || length(progress) != 1L || is.na(progress)) {
-    stop("`progress` must be TRUE or FALSE.", call. = FALSE)
-  }
-  progress_bar <- if (progress) {
-    utils::txtProgressBar(min = 0L, max = length(requested_rounds) + 2L, style = 3L)
-  } else {
-    NULL
-  }
-  if (!is.null(progress_bar)) {
-    on.exit(close(progress_bar), add = TRUE)
-  }
+  timings[["loading_dictionary_and_selecting_fields"]] <-
+    .elapsed_seconds(stage_started)
+  .progress_stage_done(
+    progress, "loading dictionary and selecting fields",
+    timings[["loading_dictionary_and_selecting_fields"]], total_started
+  )
+
+  stage_started <- .extract_clock()
+  .progress_stage_start(progress, "loading subject links")
   crosswalk_result <- .load_crosswalk(source, registry)
   prepared_crosswalk <- .prepare_crosswalk(crosswalk_result$data, registry)
-  if (!is.null(progress_bar)) {
-    utils::setTxtProgressBar(progress_bar, 1L)
-  }
+  timings[["loading_subject_links"]] <- .elapsed_seconds(stage_started)
+  .progress_stage_done(
+    progress, "loading subject links",
+    timings[["loading_subject_links"]], total_started
+  )
   issue_parts <- list(crosswalk_result$issues, prepared_crosswalk$issues)
   observation_parts <- list()
   raw_parts <- list()
@@ -544,17 +589,33 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
     round_row <- dictionary$rounds[dictionary$rounds$round_id == round_id, , drop = FALSE]
     registry_row <- registry[registry$round_id == round_id, , drop = FALSE]
     round_occurrences <- selected[selected$round_id == round_id, , drop = FALSE]
-    fields <- unique(round_occurrences$variable)
+    generation_round_occurrences <- generation_occurrences[
+      generation_occurrences$round_id == round_id, , drop = FALSE
+    ]
+    fields <- unique(generation_round_occurrences$variable)
+    round_started <- .extract_clock()
+    .progress_message(
+      progress,
+      "Round ", round_index, "/", length(requested_rounds), " ", round_id,
+      " | requesting ", .format_records(length(fields)), " fields"
+    )
     fetched <- if (inherits(source, "react_oracle_source")) {
       .read_oracle_round(source, registry_row, fields)
+    } else if (inherits(source, "react_synthetic_source")) {
+      .read_synthetic_round(source, registry_row, generation_round_occurrences, dictionary)
     } else {
       .read_file_round(source, registry_row, fields)
     }
     issue_parts[[length(issue_parts) + 1L]] <- fetched$issues
     if (is.null(fetched$data)) {
-      if (!is.null(progress_bar)) {
-        utils::setTxtProgressBar(progress_bar, round_index + 1L)
-      }
+      round_timings[[gsub("[.]", "_", round_id)]] <- .elapsed_seconds(round_started)
+      .progress_message(
+        progress,
+        "Round ", round_index, "/", length(requested_rounds), " ", round_id,
+        " | no records received",
+        " | round ", .format_seconds(round_timings[[gsub("[.]", "_", round_id)]]),
+        " | elapsed ", .format_seconds(.elapsed_seconds(total_started))
+      )
       next
     }
     observed <- .make_observations(
@@ -571,23 +632,74 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
       observed$observations,
       round_occurrences
     )
-    if (!is.null(progress_bar)) {
-      utils::setTxtProgressBar(progress_bar, round_index + 1L)
-    }
+    round_key <- gsub("[.]", "_", round_id)
+    round_timings[[round_key]] <- .elapsed_seconds(round_started)
+    .progress_message(
+      progress,
+      "Round ", round_index, "/", length(requested_rounds), " ", round_id,
+      " | received ", .format_records(nrow(fetched$data)), " records",
+      " | round ", .format_seconds(round_timings[[round_key]]),
+      " | elapsed ", .format_seconds(.elapsed_seconds(total_started))
+    )
   }
 
-  observations <- .assign_visit_order(.bind_rows(observation_parts, .empty_observations()))
+  timings[["extracting_rounds"]] <- sum(round_timings)
+
+  stage_started <- .extract_clock()
+  .progress_stage_start(progress, "combining rounds")
+  observations <- .bind_rows(observation_parts, .empty_observations())
   raw_values <- .bind_rows(raw_parts, .empty_raw_values())
-  harmonised <- .harmonise_values(raw_values, dictionary)
-  raw_data <- .make_simple_raw_data(observations, raw_values)
+  timings[["combining_rounds"]] <- .elapsed_seconds(stage_started)
+  .progress_stage_done(
+    progress, "combining rounds", timings[["combining_rounds"]], total_started
+  )
+
+  stage_started <- .extract_clock()
+  .progress_stage_start(progress, "assigning visits")
+  observations <- .assign_visit_order(observations)
+  timings[["assigning_visits"]] <- .elapsed_seconds(stage_started)
+  .progress_stage_done(
+    progress, "assigning visits", timings[["assigning_visits"]], total_started
+  )
+
+  stage_started <- .extract_clock()
+  .progress_stage_start(progress, "harmonising")
+  selected_mappings <- dictionary$mappings[
+    dictionary$mappings$occurrence_id %in% selected$occurrence_id,
+    ,
+    drop = FALSE
+  ]
+  harmonised <- .harmonise_values(
+    raw_values,
+    dictionary,
+    mappings = selected_mappings,
+    output_plan = selected_output_plan
+  )
+  timings[["harmonising"]] <- .elapsed_seconds(stage_started)
+  .progress_stage_done(
+    progress, "harmonising", timings[["harmonising"]], total_started
+  )
+
+  stage_started <- .extract_clock()
+  .progress_stage_start(progress, "creating cleaned table")
   data <- .make_simple_harmonised_data(
     observations,
     harmonised$data,
-    requested_concepts = concepts
+    requested_columns = requested_output_columns
   )
-  if (!is.null(progress_bar)) {
-    utils::setTxtProgressBar(progress_bar, length(requested_rounds) + 2L)
-  }
+  timings[["creating_cleaned_table"]] <- .elapsed_seconds(stage_started)
+  .progress_stage_done(
+    progress, "creating cleaned table",
+    timings[["creating_cleaned_table"]], total_started
+  )
+
+  stage_started <- .extract_clock()
+  .progress_stage_start(progress, "creating raw table")
+  raw_data <- .make_simple_raw_data(observations, raw_values)
+  timings[["creating_raw_table"]] <- .elapsed_seconds(stage_started)
+  .progress_stage_done(
+    progress, "creating raw table", timings[["creating_raw_table"]], total_started
+  )
   issue_parts[[length(issue_parts) + 1L]] <- harmonised$issues
   issues <- .bind_rows(issue_parts, .empty_issues())
   dictionary_version <- react_dictionary_version()
@@ -597,7 +709,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
       "package_version", "dictionary_release", "dictionary_manifest_sha256",
       "source_type", "requested_rounds", "requested_families",
       "observation_count", "data_column_count", "raw_data_column_count",
-      "raw_value_count", "harmonised_value_count",
+      "concept_output_column_count", "raw_value_count", "harmonised_value_count",
       "issue_count", "completeness"
     ),
     value = c(
@@ -610,6 +722,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
       as.character(nrow(observations)),
       as.character(ncol(data)),
       as.character(ncol(raw_data)),
+      as.character(length(requested_output_columns)),
       as.character(nrow(raw_values)),
       as.character(nrow(harmonised$data)),
       as.character(nrow(issues)),
@@ -617,15 +730,46 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
     ),
     stringsAsFactors = FALSE
   )
+  if (inherits(source, "react_synthetic_source")) {
+    synthetic_manifest <- data.frame(
+      key = c(
+        "synthetic_seed", "synthetic_profile_version", "synthetic_profile_sha256",
+        "synthetic_profile_status", "synthetic_requested_counts",
+        "synthetic_safe_prior_fraction", "synthetic_subject_model"
+      ),
+      value = c(
+        as.character(source$seed),
+        unname(source$profile_metadata[["profile_version"]]),
+        source$profile_sha256,
+        unname(source$profile_metadata[["status"]]),
+        paste(paste(names(source$n_per_round), source$n_per_round, sep = "="), collapse = "|"),
+        as.character(source$safe_prior_fraction),
+        "independent_subjects_visit_1"
+      ),
+      stringsAsFactors = FALSE
+    )
+    manifest <- rbind(manifest, synthetic_manifest)
+  }
   result <- list(
     data = data,
     raw_data = raw_data,
     observations = observations,
     raw_values = raw_values,
     harmonised_values = harmonised$data,
+    column_dictionary = result_output_plan,
     issues = issues,
     manifest = manifest
   )
+
+  stage_started <- .extract_clock()
+  .progress_stage_start(progress, "validation")
   .validate_extraction_result(result)
+  timings[["validation"]] <- .elapsed_seconds(stage_started)
+  timings <- c(timings, stats::setNames(round_timings, paste0("round_", names(round_timings))))
+  timings[["total"]] <- .elapsed_seconds(total_started)
+  result$manifest <- rbind(result$manifest, .timing_manifest_rows(timings))
+  .progress_stage_done(
+    progress, "validation", timings[["validation"]], total_started
+  )
   result
 }

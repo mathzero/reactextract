@@ -2,10 +2,10 @@ test_that("pinned dictionary verifies and exposes the fixed contract", {
   dictionary <- react_dictionary(refresh = TRUE)
   version <- react_dictionary_version()
 
-  expect_identical(version$dictionary_release, "v1.0.0-rc2")
+  expect_identical(version$dictionary_release, "v1.0.0-rc9")
   expect_identical(
     version$manifest_sha256,
-    "87102e6aa90f440e079ee4f966140263a0998874af7f09264ae7e19fa8b6d29b"
+    "03a2fb41a02becbe292663934e6ed436a85335b93d5004118a82ea9e4460a846"
   )
   expect_equal(nrow(dictionary$rounds), 25L)
   expect_equal(nrow(dictionary$occurrences), 15093L)
@@ -13,12 +13,93 @@ test_that("pinned dictionary verifies and exposes the fixed contract", {
   expect_equal(nrow(dictionary$concepts), 478L)
   expect_equal(nrow(dictionary$mappings), 436L)
   expect_equal(nrow(dictionary$oracle_unavailable_fields), 4L)
+  expect_equal(nrow(dictionary$concept_value_lookup), 67452L)
+  expect_equal(nrow(dictionary$concept_output_columns), 15087L)
+  duplicates <- duplicated(
+    dictionary$concept_output_columns[c("output_column", "round_id")]
+  )
+  expect_true(all(
+    dictionary$concept_output_columns$output_strategy[duplicates] == "reviewed_group"
+  ))
+  expect_equal(nrow(dictionary$harmonisation_groups), 31L)
+  expect_equal(nrow(dictionary$harmonisation_inputs), 543L)
+  expect_equal(nrow(dictionary$instruments), 50L)
+  expect_equal(nrow(dictionary$synthetic_profile_specs), 15093L)
+  expect_equal(nrow(dictionary$routing_rules), 1989L)
+  expect_true(all(dictionary$routing_rules$review_state == "approved"))
+  expect_true(all(dictionary$synthetic_profile_specs$review_state == "approved"))
+  expect_true(all(dictionary$safe_bins$review_state == "approved"))
+  grouped <- dictionary$concept_output_columns[
+    dictionary$concept_output_columns$output_strategy == "reviewed_group",
+    , drop = FALSE
+  ]
+  components <- dictionary$concept_output_columns[
+    dictionary$concept_output_columns$output_strategy == "component",
+    , drop = FALSE
+  ]
+  expect_true(all(grouped$output_column == grouped$concept_id))
+  expect_true(all(startsWith(
+    components$output_column,
+    paste0(components$concept_id, "__field__")
+  )))
   expect_true(all(dictionary$occurrences$review_state == "approved"))
   expect_true(all(dictionary$mappings$review_state == "approved"))
   expect_false(any(
     dictionary$occurrence_exclusions$occurrence_id %in%
       dictionary$occurrences$occurrence_id
   ))
+})
+
+test_that("shared harmonisation notes and decisions are available offline", {
+  notes <- react_harmonisation_notes(open = FALSE)
+  expect_true(file.exists(notes))
+  expect_match(
+    paste(readLines(notes, warn = FALSE), collapse = "\n"),
+    "LONGCOVIDB2_21"
+  )
+
+  decisions <- react_harmonisation_decisions(
+    "health.persistent_symptoms.duration.loss_or_change_smell"
+  )
+  expect_equal(nrow(decisions$groups), 1L)
+  expect_true(all(decisions$inputs$concept_id == decisions$groups$concept_id[[1]]))
+  expect_true(all(c("LONGCOVIDB2_1", "LONGCOVIDB_1_1", "LONGCOVIDB_2_1") %in%
+    decisions$inputs$source_variable))
+})
+
+test_that("shared synthetic methods and review contract are available offline", {
+  notes <- react_synthetic_notes(open = FALSE)
+  expect_true(file.exists(notes))
+  expect_match(
+    paste(readLines(notes, warn = FALSE), collapse = "\n"),
+    "development fallback"
+  )
+  expect_match(
+    paste(readLines(notes, warn = FALSE), collapse = "\n"),
+    "fbf7bfc9453cb06a99284d0d5bc86d3bcd5fdc7f7d942561eaba2df7f99d6990",
+    fixed = TRUE
+  )
+  dictionary <- react_dictionary()
+  expect_equal(nrow(dictionary$instruments), 50L)
+  expect_equal(nrow(dictionary$occurrence_routing_status), 15093L)
+})
+
+test_that("source coding expands offline coverage without claiming harmonisation", {
+  concepts <- c(
+    "health.acute_symptoms.cough",
+    "infection_measurement.testing_history.previous_antibody_test_history"
+  )
+  coding <- react_concept_coding(concepts)
+
+  expect_setequal(unique(coding$concept_id), concepts)
+  expect_true(all(c(
+    "round_id", "raw_field", "raw_value", "harmonised_value",
+    "mapping_status"
+  ) %in% names(coding)))
+  expect_true(any(coding$concept_id == concepts[[1]]))
+  expect_true(any(coding$concept_id == concepts[[2]]))
+  expect_true(any(coding$mapping_status == "standardized_missing"))
+  expect_true(any(coding$mapping_status == "source_label"))
 })
 
 test_that("reviewed Oracle exceptions come from the pinned dictionary", {

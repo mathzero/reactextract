@@ -26,6 +26,12 @@ copied <- c(
 if (!all(copied)) {
   stop("Failed to assemble one or more offline bundle files.", call. = FALSE)
 }
+baseline_profile <- file.path(output, "react-synthetic-profile-v4")
+dir.create(baseline_profile, recursive = TRUE, showWarnings = FALSE)
+utils::untar("inst/extdata/synthetic-profile.tar.gz", exdir = baseline_profile)
+if (!file.exists(file.path(baseline_profile, "manifest.csv"))) {
+  stop("Failed to include the approved baseline profile for targeted repair.", call. = FALSE)
+}
 
 source("R/dictionary.R", local = TRUE)
 files <- sort(list.files(output, recursive = TRUE, full.names = TRUE))

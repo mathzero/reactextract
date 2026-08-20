@@ -22,13 +22,16 @@ react_extract(
 
 \item{concepts}{Optional exact concept IDs used as an additional filter.}
 
-\item{progress}{Show round-by-round progress. Defaults to on in interactive R
-sessions and off in scripts.}
+\item{progress}{Show round and processing-stage progress. Updates include
+requested fields, records received, and elapsed time. Defaults to on in
+interactive R sessions and off in scripts.}
 }
 \value{
-A named list. \code{data} is the main cleaned table with one concept per
-column; \code{raw_data} contains one column per exact source field. Detailed long
-tables remain available for provenance.
+A named list. \code{data} is the main cleaned table. Concepts with at most
+one field per round use one concept column; genuine multi-item concepts use
+separate \code{concept__field__EXACT_RAW_FIELD} columns. \code{column_dictionary} explains
+those columns, and \code{raw_data} retains one column per exact source field.
+Detailed long tables remain available for provenance.
 }
 \description{
 Extract REACT variables by reviewed topic

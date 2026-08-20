@@ -9,7 +9,7 @@ react_write <- function(result, path, format = c("rds", "parquet")) {
   if (!is.list(result) || !all(
     c(
       "data", "raw_data", "observations", "raw_values",
-      "harmonised_values", "issues", "manifest"
+      "harmonised_values", "column_dictionary", "issues", "manifest"
     ) %in% names(result)
   )) {
     stop("`result` must be returned by `react_extract()`.", call. = FALSE)
@@ -27,7 +27,7 @@ react_write <- function(result, path, format = c("rds", "parquet")) {
   dir.create(path, recursive = TRUE, showWarnings = FALSE)
   tables <- c(
     "data", "raw_data", "observations", "raw_values",
-    "harmonised_values", "issues", "manifest"
+    "harmonised_values", "column_dictionary", "issues", "manifest"
   )
   for (name in tables) {
     arrow::write_parquet(result[[name]], file.path(path, paste0(name, ".parquet")))

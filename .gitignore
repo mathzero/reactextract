@@ -10,4 +10,5 @@ renv/sandbox/
 dist/
 *.tar.gz
 !inst/extdata/dictionary.tar.gz
+!inst/extdata/synthetic-profile.tar.gz
 *.Rcheck/

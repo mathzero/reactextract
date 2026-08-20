@@ -1,7 +1,13 @@
 .analysis_values <- function(result) {
   harmonised <- result$harmonised_values
   raw <- result$raw_values
-  harmonised_occurrences <- unique(harmonised$source_occurrence_id)
+  # A reviewed grouped transform can combine several exact source occurrences.
+  # Expand that provenance field before deciding which raw rows are already
+  # represented in the cleaned profile.
+  harmonised_occurrences <- unique(unlist(
+    strsplit(harmonised$source_occurrence_id, "|", fixed = TRUE),
+    use.names = FALSE
+  ))
   raw <- raw[!(raw$occurrence_id %in% harmonised_occurrences), , drop = FALSE]
 
   harmonised_values <- if (nrow(harmonised) == 0L) {
@@ -10,10 +16,14 @@
     data.frame(
       observation_id = harmonised$observation_id,
       round_id = harmonised$round_id,
-      feature_id = harmonised$concept_id,
+      feature_id = harmonised$output_column,
       concept_id = harmonised$concept_id,
       occurrence_id = harmonised$source_occurrence_id,
-      profile_source = "harmonised",
+      profile_source = ifelse(
+        harmonised$mapping_id == "",
+        "source_preserved",
+        "harmonised"
+      ),
       missing_reason = harmonised$missing_reason,
       harmonised[c(
         "value_type", "value_logical", "value_integer", "value_double",
@@ -260,9 +270,9 @@
 
 #' Build aggregate distribution profiles inside the enclave
 #'
-#' Harmonised values are used where an approved transform exists; otherwise the
-#' exact occurrence is profiled as a raw-only feature. Uncoded character text is
-#' represented only by length bands and is never retained in the profile.
+#' Approved transforms are used where available; otherwise source-preserving
+#' cleaned values are profiled. Uncoded character text is represented only by
+#' length bands and is never retained in the profile.
 #'
 #' @param result A result returned by [react_extract()].
 #' @param pairs Optional explicit pairs of feature IDs for pairwise summaries.
@@ -303,7 +313,7 @@ react_profile <- function(result, pairs = NULL) {
     observed <- .observed_values(data)
     if (nrow(observed$data) == 0L) next
     observed_type <- observed$data$value_type[[1]]
-    is_uncoded_text <- identity$profile_source == "raw" &&
+    is_uncoded_text <- identity$profile_source %in% c("raw", "source_preserved") &&
       observed_type == "character" &&
       !(identity$occurrence_id %in% coded_occurrences)
     if (is_uncoded_text) {
@@ -463,6 +473,20 @@ react_sdc_policy <- function(min_count = 10L, count_rounding = 5L,
   data
 }
 
+.sdc_issue_table <- function(data, policy) {
+  if (!is.data.frame(data) || nrow(data) == 0L ||
+      !"affected_count" %in% names(data)) return(data)
+  counts <- suppressWarnings(as.numeric(data$affected_count))
+  present <- !is.na(counts)
+  released <- present & counts >= policy$min_count
+  protected <- rep("", length(counts))
+  protected[released] <- as.character(
+    round(counts[released] / policy$count_rounding) * policy$count_rounding
+  )
+  data$affected_count <- protected
+  data
+}
+
 #' Prepare aggregate profiles for enclave disclosure review
 #'
 #' This applies mechanical suppression and rounding but does not constitute
@@ -473,6 +497,70 @@ react_sdc_policy <- function(min_count = 10L, count_rounding = 5L,
 #' @return Suppressed and rounded aggregate tables marked as requiring review.
 #' @export
 react_prepare_profile_export <- function(profile, policy = react_sdc_policy()) {
+  if (is.list(profile) && all(.profile_v2_required %in% names(profile))) {
+    out <- profile
+    out$round_denominators <- .sdc_count_table(
+      out$round_denominators, "round_id", policy
+    )
+    out$missingness <- .sdc_count_table(
+      out$missingness, c("occurrence_id", "round_id"), policy
+    )
+    out$categorical_counts <- .sdc_count_table(
+      out$categorical_counts, c("occurrence_id", "round_id"), policy
+    )
+    out$numeric_bin_counts <- .sdc_count_table(
+      out$numeric_bin_counts, c("occurrence_id", "round_id"), policy
+    )
+    out$text_presence <- .sdc_count_table(
+      out$text_presence, c("occurrence_id", "round_id"), policy
+    )
+    out$routing_validation <- .sdc_count_table(
+      out$routing_validation, c("routing_rule_id", "round_id"), policy
+    )
+    out$issues <- .sdc_issue_table(out$issues, policy)
+    if (is.data.frame(out$overall_missingness)) {
+      out$overall_missingness <- .sdc_count_table(
+        out$overall_missingness, "distribution_group_id", policy
+      )
+    }
+    if (is.data.frame(out$overall_categorical_counts)) {
+      out$overall_categorical_counts <- .sdc_count_table(
+        out$overall_categorical_counts, "distribution_group_id", policy
+      )
+    }
+    if (is.data.frame(out$overall_numeric_bin_counts)) {
+      out$overall_numeric_bin_counts <- .sdc_count_table(
+        out$overall_numeric_bin_counts, "distribution_group_id", policy
+      )
+    }
+    if (is.data.frame(out$overall_text_presence)) {
+      out$overall_text_presence <- .sdc_count_table(
+        out$overall_text_presence, "distribution_group_id", policy
+      )
+    }
+    out$metadata <- rbind(
+      out$metadata[!out$metadata$key %in% c(
+        "status", "minimum_cell_count", "count_rounding",
+        "complementary_suppression", "raw_text_included",
+        "exact_extrema_included", "disclosure_approval"
+      ), , drop = FALSE],
+      data.frame(
+        key = c(
+          "status", "minimum_cell_count", "count_rounding",
+          "complementary_suppression", "raw_text_included",
+          "exact_extrema_included", "disclosure_approval"
+        ),
+        value = c(
+          "requires_enclave_disclosure_review",
+          as.character(policy$min_count), as.character(policy$count_rounding),
+          "true", "false", "false", "not_approved"
+        ),
+        stringsAsFactors = FALSE
+      )
+    )
+    class(out) <- c("react_profile_v2", "list")
+    return(out)
+  }
   required <- c(
     "metadata", "missingness", "categorical", "numeric", "histograms",
     "text_lengths", "pair_correlations", "pair_crosstabs", "pair_grouped"
