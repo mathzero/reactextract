@@ -1,12 +1,12 @@
 # reactextract
 
-`reactextract` supports two equally important ways of working with REACT data:
+`reactextract` supports two ways of working with REACT data:
 
 1. extract real REACT-1 and REACT-2 data inside the secure enclave; and
-2. generate fictional data outside the enclave so analysis code can be written
+2. generate synthetic data outside the enclave so analysis code can be written
    and tested before it is transferred inside.
 
-Both routes use the same `react_extract()` function, the same reviewed
+Both routes use the same `react_extract()` function, the same
 [`react_wiki`](https://github.com/mathzero/react_wiki) dictionary, and the same
 output tables. In most cases, moving an analysis into the enclave means changing
 only the source of the data.
@@ -19,6 +19,12 @@ Inside the enclave, install the supplied offline source package:
 
 ```r
 install.packages("reactextract_0.3.3.tar.gz", repos = NULL, type = "source")
+library(reactextract)
+```
+
+```r
+library(devtools)
+install_github("mathzero/reactextract")
 library(reactextract)
 ```
 
