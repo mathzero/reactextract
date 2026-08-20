@@ -20,6 +20,10 @@ condition, acute symptoms, and previous-testing history.
 The smoke summary also confirms that all three areas produce cleaned output,
 not only raw values.
 
+Normal extraction now returns wide cleaned and raw tables without retaining the
+large long tables. Request `output = "long"` or `output = "both"` explicitly
+only when detailed typed-value provenance is needed.
+
 Only metadata, aggregate counts, manifests and issue records are written. The
 row-level smoke result is discarded. Nevertheless, keep the report inside the
 enclave unless it has passed the normal disclosure-review process.
@@ -51,7 +55,7 @@ folder inside the enclave until it has passed the normal disclosure review.
 
 ### Approved categorical profile
 
-Version 0.3.3 includes the formally approved `react-synthetic-profile-v4`.
+Version 0.4.0 includes the formally approved `react-synthetic-profile-v4`.
 The completed correction recovered 151 exact category distributions from
 previously approved singleton bins and queried only the remaining 17 fields.
 The correction script remains in the release for provenance, but it does not

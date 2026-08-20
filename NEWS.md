@@ -1,3 +1,17 @@
+# reactextract 0.4.0
+
+- `react_extract()` now defaults to efficient wide output containing the cleaned
+  `data` and exact `raw_data` tables without retaining the very large detailed
+  long tables.
+- The new `output` argument accepts `"wide"`, `"long"`, or `"both"`. Long values
+  are processed one round at a time in wide mode and retained only when
+  explicitly requested.
+- Extraction results now print a compact summary, and manifests record the
+  selected output mode and whether long tables were retained.
+- `react_write()` writes the tables present in any output mode, while
+  `react_profile()` gives a direct instruction to request long output when it is
+  needed.
+
 # reactextract 0.3.3
 
 - Bundles the formally disclosure-approved `react-synthetic-profile-v4` and

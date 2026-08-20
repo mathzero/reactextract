@@ -52,7 +52,8 @@ main <- function() {
       families = "all",
       rounds = smoke_rounds,
       concepts = smoke_concepts,
-      progress = TRUE
+      progress = TRUE,
+      output = "both"
     )
     count_by_round <- function(data) {
       counts <- table(factor(data$round_id, levels = smoke_rounds))

@@ -9,7 +9,8 @@ test_that("continuous Long COVID duration is binned to reviewed categories", {
     react_files(list(react1.r05 = round)),
     families = "health/persistent-symptoms",
     rounds = "react1.r05",
-    concepts = "health.persistent_symptoms.duration.loss_or_change_smell"
+    concepts = "health.persistent_symptoms.duration.loss_or_change_smell",
+    output = "both"
   )
   output_column <- unique(result$harmonised_values$output_column)
 
@@ -41,7 +42,8 @@ test_that("later categorical values take the reviewed target coding", {
     react_files(list(react2.r06 = round)),
     families = "health/persistent-symptoms",
     rounds = "react2.r06",
-    concepts = "health.persistent_symptoms.duration.loss_or_change_smell"
+    concepts = "health.persistent_symptoms.duration.loss_or_change_smell",
+    output = "both"
   )
   output_column <- unique(result$harmonised_values$output_column)
 
@@ -68,7 +70,8 @@ test_that("conflicting positive DAYS and WEEKS stay unresolved", {
     react_files(list(react1.r05 = round)),
     families = "health/persistent-symptoms",
     rounds = "react1.r05",
-    concepts = "health.persistent_symptoms.duration.loss_or_change_smell"
+    concepts = "health.persistent_symptoms.duration.loss_or_change_smell",
+    output = "both"
   )
   output_column <- unique(result$harmonised_values$output_column)
 
@@ -93,7 +96,8 @@ test_that("compound duration uses the longest reviewed symptom component", {
     react_files(list(react1.r05 = round)),
     families = "health/persistent-symptoms",
     rounds = "react1.r05",
-    concepts = "health.persistent_symptoms.duration.chest_pain_or_tightness"
+    concepts = "health.persistent_symptoms.duration.chest_pain_or_tightness",
+    output = "both"
   )
   output_column <- unique(result$harmonised_values$output_column)
 
@@ -118,7 +122,8 @@ test_that("shifted REACT-2 fields use the same reviewed concepts", {
     react_files(list(react2.r06 = round)),
     families = "health/persistent-symptoms",
     rounds = "react2.r06",
-    concepts = concepts
+    concepts = concepts,
+    output = "both"
   )
 
   expect_setequal(unique(result$harmonised_values$concept_id), concepts)

@@ -5,7 +5,7 @@ can be installed without contacting a package repository. Oracle and Parquet
 features use packages normally supplied by the enclave environment.
 
 ```r
-install.packages("reactextract_0.3.3.tar.gz", repos = NULL, type = "source")
+install.packages("reactextract_0.4.0.tar.gz", repos = NULL, type = "source")
 
 stopifnot(getRversion() >= "4.4.0", getRversion() < "4.5.0")
 stopifnot(requireNamespace("DBI", quietly = TRUE))
@@ -46,6 +46,10 @@ preflight <- react_validate_oracle(source)
 react_write_enclave_report(preflight, "reactextract-acceptance/preflight")
 ```
 
+Normal extractions default to the efficient wide `data` and `raw_data` tables.
+Use `output = "long"` only for specialist typed-value work, or `output = "both"`
+when both representations are genuinely required.
+
 The acceptance runner does not save the row-level smoke result. Keep even its
 aggregate report inside the enclave unless it has passed the normal disclosure
 review process. Later extraction results must never be copied out of the enclave.
@@ -56,7 +60,7 @@ submitted for disclosure review.
 
 ### Approved categorical profile
 
-Version 0.3.3 includes the formally approved `react-synthetic-profile-v4`.
+Version 0.4.0 includes the formally approved `react-synthetic-profile-v4`.
 The completed correction recovered 151 exact distributions from previously
 approved singleton bins and queried only the remaining 17 fields. No additional
 profile work is required to use `react_synthetic()`.

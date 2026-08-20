@@ -1,6 +1,6 @@
 Package: reactextract
 Title: Extract Reviewed REACT Study Metadata and Data
-Version: 0.3.3
+Version: 0.4.0
 Authors@R: person("mathzero", email = "mathzero@users.noreply.github.com", role = c("aut", "cre"))
 Description: Extracts REACT-1 and REACT-2 variables from caller-managed
     Oracle connections or round files using a pinned, reviewed REACT metadata

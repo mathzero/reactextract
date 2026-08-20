@@ -8,7 +8,7 @@ test:
 
 check: document
 	RENV_CONFIG_SANDBOX_ENABLED=FALSE R CMD build --no-manual .
-	RENV_CONFIG_SANDBOX_ENABLED=FALSE _R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual reactextract_0.3.3.tar.gz
+	RENV_CONFIG_SANDBOX_ENABLED=FALSE _R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual reactextract_0.4.0.tar.gz
 
 bundle: check
 	Rscript --vanilla scripts/build_offline_bundle.R

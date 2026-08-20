@@ -1,4 +1,4 @@
-test_that("synthetic extraction uses the existing result contract", {
+test_that("synthetic extraction defaults to the compact wide result contract", {
   source <- react_synthetic(
     n_per_round = c(REACT1_R01 = 20L, REACT2_S5_R01 = 20L),
     seed = 41L
@@ -13,10 +13,11 @@ test_that("synthetic extraction uses the existing result contract", {
   expect_identical(
     names(result),
     c(
-      "data", "raw_data", "observations", "raw_values",
-      "harmonised_values", "column_dictionary", "issues", "manifest"
+      "data", "raw_data", "observations", "column_dictionary", "issues", "manifest"
     )
   )
+  expect_s3_class(result, "react_extract_result")
+  expect_false(any(c("raw_values", "harmonised_values") %in% names(result)))
   expect_equal(nrow(result$observations), 40L)
   expect_true(all(result$observations$visit_number == 1L))
   expect_true(all(result$observations$total_visits == 1L))
@@ -26,6 +27,16 @@ test_that("synthetic extraction uses the existing result contract", {
     result$manifest$value[result$manifest$key == "synthetic_profile_status"],
     "approved_for_release"
   )
+  expect_identical(
+    result$manifest$value[result$manifest$key == "output_mode"],
+    "wide"
+  )
+  expect_identical(
+    result$manifest$value[result$manifest$key == "long_tables_included"],
+    "false"
+  )
+  printed <- capture.output(print(result))
+  expect_match(paste(printed, collapse = "\n"), "Output: wide", fixed = TRUE)
 })
 
 test_that("the default profile is the formally approved v4 release", {
@@ -85,10 +96,12 @@ test_that("a complete small all-field extraction covers the 25-round contract", 
 
   expect_equal(nrow(result$observations), 25L)
   expect_equal(length(unique(result$observations$SUBJECT_ID)), 25L)
-  expect_true(all(dictionary$occurrences$occurrence_id %in% result$raw_values$occurrence_id))
-  expect_true(all(c(
-    "data", "raw_data", "raw_values", "harmonised_values", "manifest"
-  ) %in% names(result)))
+  expect_false(any(c("raw_values", "harmonised_values") %in% names(result)))
+  expect_equal(
+    as.integer(result$manifest$value[result$manifest$key == "raw_value_count"]),
+    nrow(dictionary$occurrences)
+  )
+  expect_true(all(c("data", "raw_data", "manifest") %in% names(result)))
 })
 
 test_that("synthetic streams are deterministic and selector independent", {

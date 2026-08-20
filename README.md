@@ -18,7 +18,7 @@ The package covers REACT-1 rounds 1–19 and REACT-2 rounds 1–6.
 Inside the enclave, install the supplied offline source package:
 
 ```r
-install.packages("reactextract_0.3.3.tar.gz", repos = NULL, type = "source")
+install.packages("reactextract_0.4.0.tar.gz", repos = NULL, type = "source")
 library(reactextract)
 ```
 
@@ -199,7 +199,8 @@ raw field names, round coverage, response coding and approved distributions.
 
 ## Results
 
-Most analyses begin with two tables:
+The default output is deliberately compact and centres on two researcher-ready
+wide tables:
 
 - `result$data`: identifiers followed by cleaned concept columns;
 - `result$raw_data`: the same identifiers followed by exact source fields.
@@ -209,14 +210,26 @@ result$data
 result$raw_data
 ```
 
-The full result also contains:
+The default result also contains small supporting tables:
 
 - `observations`: study, round, participant keys and visit order;
-- `raw_values`: exact source values in long form;
-- `harmonised_values`: cleaned values and transform provenance;
 - `column_dictionary`: the fields and rounds contributing to each output column;
 - `issues`: unavailable fields, unexpected codes and partial failures;
 - `manifest`: package, dictionary, source, request, counts and stage timings.
+
+Detailed typed values are available when they are genuinely needed, but are not
+retained by default because an all-round extraction would otherwise contain
+tens of millions of long rows:
+
+```r
+long_result <- react_extract(source, output = "long")
+full_result <- react_extract(source, output = "both")
+```
+
+`output = "long"` omits the wide tables and returns `raw_values` and
+`harmonised_values`. `output = "both"` returns all eight tables. Profiling an
+extraction result requires one of these long-enabled modes; large enclave
+profiles should use `react_profile_source()` directly.
 
 Use the column dictionary whenever a concept has multiple component fields:
 

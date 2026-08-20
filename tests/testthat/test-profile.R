@@ -10,7 +10,8 @@ test_that("profiles contain aggregates but no respondent identifiers or raw text
   result <- react_extract(
     react_files(list(react1.r01 = round)),
     families = c("health/preexisting-conditions", "people-households/housing"),
-    rounds = "react1.r01"
+    rounds = "react1.r01",
+    output = "long"
   )
   profile <- react_profile(result)
 
@@ -33,7 +34,8 @@ test_that("selected pairs produce correlations without automatic all-pairs", {
   result <- react_extract(
     react_files(list(react1.r01 = round)),
     families = "health/preexisting-conditions",
-    rounds = "react1.r01"
+    rounds = "react1.r01",
+    output = "long"
   )
   profile_without_pairs <- react_profile(result)
   expect_equal(nrow(profile_without_pairs$pair_crosstabs), 0L)
@@ -55,7 +57,8 @@ test_that("export preparation suppresses, complements, rounds, and requires revi
     react_files(list(react1.r01 = round)),
     families = "health/preexisting-conditions",
     rounds = "react1.r01",
-    concepts = "health.preexisting.overweight"
+    concepts = "health.preexisting.overweight",
+    output = "long"
   )
   export <- react_prepare_profile_export(react_profile(result))
   counts <- export$categorical$count
@@ -71,7 +74,8 @@ test_that("export preparation suppresses, complements, rounds, and requires revi
     react_files(list(react1.r01 = small_round)),
     families = "health/preexisting-conditions",
     rounds = "react1.r01",
-    concepts = "health.preexisting.overweight"
+    concepts = "health.preexisting.overweight",
+    output = "long"
   )
   suppressed <- react_prepare_profile_export(react_profile(small))$categorical
   expect_true(all(is.na(suppressed$count)))

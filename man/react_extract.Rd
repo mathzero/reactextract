@@ -9,11 +9,13 @@ react_extract(
   families = "all",
   rounds = "all",
   concepts = NULL,
-  progress = interactive()
+  progress = interactive(),
+  output = c("wide", "long", "both")
 )
 }
 \arguments{
-\item{source}{A source created by \code{\link[=react_oracle]{react_oracle()}} or \code{\link[=react_files]{react_files()}}.}
+\item{source}{A source created by \code{\link[=react_oracle]{react_oracle()}}, \code{\link[=react_files]{react_files()}}, or
+\code{\link[=react_synthetic]{react_synthetic()}}.}
 
 \item{families}{\code{all} or dictionary family selectors returned by
 \code{\link[=react_families]{react_families()}}.}
@@ -25,13 +27,20 @@ react_extract(
 \item{progress}{Show round and processing-stage progress. Updates include
 requested fields, records received, and elapsed time. Defaults to on in
 interactive R sessions and off in scripts.}
+
+\item{output}{Output shape. \code{"wide"} (the default) returns researcher-ready
+cleaned and raw tables without retaining the large detailed long tables.
+\code{"long"} returns only the detailed typed-value tables, while \code{"both"}
+returns both representations.}
 }
 \value{
-A named list. \code{data} is the main cleaned table. Concepts with at most
-one field per round use one concept column; genuine multi-item concepts use
-separate \code{concept__field__EXACT_RAW_FIELD} columns. \code{column_dictionary} explains
-those columns, and \code{raw_data} retains one column per exact source field.
-Detailed long tables remain available for provenance.
+A \code{react_extract_result} list. In wide output, \code{data} is the main
+cleaned table and \code{raw_data} retains one column per exact source field.
+Concepts with at most one field per round use one concept column; genuine
+multi-item concepts use separate \code{concept__field__EXACT_RAW_FIELD} columns.
+\code{column_dictionary}, \code{issues}, and \code{manifest} describe the result. Detailed
+\code{raw_values} and \code{harmonised_values} are included only for \code{output = "long"}
+or \code{output = "both"}.
 }
 \description{
 Extract REACT variables by reviewed topic

@@ -484,24 +484,29 @@
   if (anyDuplicated(result$observations$observation_id)) {
     stop("Internal error: observation IDs are not unique.", call. = FALSE)
   }
-  if (!all(result$raw_values$observation_id %in% result$observations$observation_id)) {
+  if ("raw_values" %in% names(result) &&
+      !all(result$raw_values$observation_id %in% result$observations$observation_id)) {
     stop("Internal error: raw values contain an unknown observation ID.", call. = FALSE)
   }
-  if (!identical(result$data$observation_id, result$observations$observation_id) ||
-      !identical(result$raw_data$observation_id, result$observations$observation_id)) {
-    stop("Internal error: simple output rows do not match observations.", call. = FALSE)
+  if (all(c("data", "raw_data") %in% names(result)) &&
+      (!identical(result$data$observation_id, result$observations$observation_id) ||
+       !identical(result$raw_data$observation_id, result$observations$observation_id))) {
+    stop("Internal error: wide output rows do not match observations.", call. = FALSE)
   }
-  nonmissing <- .typed_nonmissing_count(result$harmonised_values)
-  expected <- result$harmonised_values$missing_reason == ""
-  if (any(nonmissing[expected] != 1L) || any(nonmissing[!expected] > 1L)) {
-    stop("Internal error: harmonised typed-value invariant failed.", call. = FALSE)
+  if ("harmonised_values" %in% names(result)) {
+    nonmissing <- .typed_nonmissing_count(result$harmonised_values)
+    expected <- result$harmonised_values$missing_reason == ""
+    if (any(nonmissing[expected] != 1L) || any(nonmissing[!expected] > 1L)) {
+      stop("Internal error: harmonised typed-value invariant failed.", call. = FALSE)
+    }
   }
   invisible(TRUE)
 }
 
 #' Extract REACT variables by reviewed topic
 #'
-#' @param source A source created by [react_oracle()] or [react_files()].
+#' @param source A source created by [react_oracle()], [react_files()], or
+#'   [react_synthetic()].
 #' @param families `all` or dictionary family selectors returned by
 #'   [react_families()].
 #' @param rounds `all`, round IDs, or survey IDs.
@@ -509,20 +514,30 @@
 #' @param progress Show round and processing-stage progress. Updates include
 #'   requested fields, records received, and elapsed time. Defaults to on in
 #'   interactive R sessions and off in scripts.
-#' @return A named list. `data` is the main cleaned table. Concepts with at most
-#'   one field per round use one concept column; genuine multi-item concepts use
-#'   separate `concept__field__EXACT_RAW_FIELD` columns. `column_dictionary` explains
-#'   those columns, and `raw_data` retains one column per exact source field.
-#'   Detailed long tables remain available for provenance.
+#' @param output Output shape. `"wide"` (the default) returns researcher-ready
+#'   cleaned and raw tables without retaining the large detailed long tables.
+#'   `"long"` returns only the detailed typed-value tables, while `"both"`
+#'   returns both representations.
+#' @return A `react_extract_result` list. In wide output, `data` is the main
+#'   cleaned table and `raw_data` retains one column per exact source field.
+#'   Concepts with at most one field per round use one concept column; genuine
+#'   multi-item concepts use separate `concept__field__EXACT_RAW_FIELD` columns.
+#'   `column_dictionary`, `issues`, and `manifest` describe the result. Detailed
+#'   `raw_values` and `harmonised_values` are included only for `output = "long"`
+#'   or `output = "both"`.
 #' @export
 react_extract <- function(source, families = "all", rounds = "all", concepts = NULL,
-                          progress = interactive()) {
+                          progress = interactive(),
+                          output = c("wide", "long", "both")) {
   if (!inherits(source, "react_source")) {
     stop("`source` must be created by `react_oracle()`, `react_files()`, or `react_synthetic()`.", call. = FALSE)
   }
   if (!is.logical(progress) || length(progress) != 1L || is.na(progress)) {
     stop("`progress` must be TRUE or FALSE.", call. = FALSE)
   }
+  output <- match.arg(output)
+  include_wide <- output %in% c("wide", "both")
+  include_long <- output %in% c("long", "both")
   total_started <- .extract_clock()
   timings <- numeric()
   round_timings <- numeric()
@@ -583,6 +598,20 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
   issue_parts <- list(crosswalk_result$issues, prepared_crosswalk$issues)
   observation_parts <- list()
   raw_parts <- list()
+  harmonised_parts <- list()
+  data_parts <- list()
+  raw_data_parts <- list()
+  raw_value_count <- 0L
+  harmonised_value_count <- 0L
+  harmonising_seconds <- 0
+  cleaned_table_seconds <- 0
+  raw_table_seconds <- 0
+  selected_mappings <- dictionary$mappings[
+    dictionary$mappings$occurrence_id %in% selected$occurrence_id,
+    ,
+    drop = FALSE
+  ]
+  .progress_stage_start(progress, "harmonising")
 
   for (round_index in seq_along(requested_rounds)) {
     round_id <- requested_rounds[[round_index]]
@@ -627,11 +656,54 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
     )
     issue_parts[[length(issue_parts) + 1L]] <- observed$issues
     observation_parts[[length(observation_parts) + 1L]] <- observed$observations
-    raw_parts[[length(raw_parts) + 1L]] <- .make_raw_values(
+    round_raw_values <- .make_raw_values(
       fetched$data,
       observed$observations,
       round_occurrences
     )
+    round_output_plan <- selected_output_plan[
+      selected_output_plan$round_id == round_id,
+      ,
+      drop = FALSE
+    ]
+    round_mappings <- selected_mappings[
+      selected_mappings$occurrence_id %in% round_output_plan$occurrence_id,
+      ,
+      drop = FALSE
+    ]
+    harmonising_started <- .extract_clock()
+    round_harmonised <- .harmonise_values(
+      round_raw_values,
+      dictionary,
+      mappings = round_mappings,
+      output_plan = round_output_plan
+    )
+    harmonising_seconds <- harmonising_seconds +
+      .elapsed_seconds(harmonising_started)
+    issue_parts[[length(issue_parts) + 1L]] <- round_harmonised$issues
+    raw_value_count <- raw_value_count + nrow(round_raw_values)
+    harmonised_value_count <- harmonised_value_count + nrow(round_harmonised$data)
+
+    if (include_wide) {
+      cleaned_started <- .extract_clock()
+      data_parts[[length(data_parts) + 1L]] <- .make_simple_harmonised_data(
+        observed$observations,
+        round_harmonised$data
+      )
+      cleaned_table_seconds <- cleaned_table_seconds +
+        .elapsed_seconds(cleaned_started)
+
+      raw_started <- .extract_clock()
+      raw_data_parts[[length(raw_data_parts) + 1L]] <- .make_simple_raw_data(
+        observed$observations,
+        round_raw_values
+      )
+      raw_table_seconds <- raw_table_seconds + .elapsed_seconds(raw_started)
+    }
+    if (include_long) {
+      raw_parts[[length(raw_parts) + 1L]] <- round_raw_values
+      harmonised_parts[[length(harmonised_parts) + 1L]] <- round_harmonised$data
+    }
     round_key <- gsub("[.]", "_", round_id)
     round_timings[[round_key]] <- .elapsed_seconds(round_started)
     .progress_message(
@@ -644,11 +716,21 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
   }
 
   timings[["extracting_rounds"]] <- sum(round_timings)
+  timings[["harmonising"]] <- harmonising_seconds
+  .progress_stage_done(
+    progress, "harmonising", timings[["harmonising"]], total_started
+  )
 
   stage_started <- .extract_clock()
   .progress_stage_start(progress, "combining rounds")
   observations <- .bind_rows(observation_parts, .empty_observations())
-  raw_values <- .bind_rows(raw_parts, .empty_raw_values())
+  if (include_long) {
+    raw_values <- .bind_rows(raw_parts, .empty_raw_values())
+    harmonised_values <- .bind_rows(
+      harmonised_parts,
+      .empty_harmonised_values()
+    )
+  }
   timings[["combining_rounds"]] <- .elapsed_seconds(stage_started)
   .progress_stage_done(
     progress, "combining rounds", timings[["combining_rounds"]], total_started
@@ -662,45 +744,40 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
     progress, "assigning visits", timings[["assigning_visits"]], total_started
   )
 
-  stage_started <- .extract_clock()
-  .progress_stage_start(progress, "harmonising")
-  selected_mappings <- dictionary$mappings[
-    dictionary$mappings$occurrence_id %in% selected$occurrence_id,
-    ,
-    drop = FALSE
-  ]
-  harmonised <- .harmonise_values(
-    raw_values,
-    dictionary,
-    mappings = selected_mappings,
-    output_plan = selected_output_plan
-  )
-  timings[["harmonising"]] <- .elapsed_seconds(stage_started)
-  .progress_stage_done(
-    progress, "harmonising", timings[["harmonising"]], total_started
-  )
+  if (include_wide) {
+    stage_started <- .extract_clock()
+    .progress_stage_start(progress, "creating cleaned table")
+    data <- .bind_simple_parts(
+      data_parts,
+      column_order = c(
+        names(.simple_identifiers(observations)),
+        requested_output_columns
+      )
+    )
+    data <- .sync_simple_identifiers(data, observations)
+    timings[["creating_cleaned_table"]] <- cleaned_table_seconds +
+      .elapsed_seconds(stage_started)
+    .progress_stage_done(
+      progress, "creating cleaned table",
+      timings[["creating_cleaned_table"]], total_started
+    )
 
-  stage_started <- .extract_clock()
-  .progress_stage_start(progress, "creating cleaned table")
-  data <- .make_simple_harmonised_data(
-    observations,
-    harmonised$data,
-    requested_columns = requested_output_columns
-  )
-  timings[["creating_cleaned_table"]] <- .elapsed_seconds(stage_started)
-  .progress_stage_done(
-    progress, "creating cleaned table",
-    timings[["creating_cleaned_table"]], total_started
-  )
-
-  stage_started <- .extract_clock()
-  .progress_stage_start(progress, "creating raw table")
-  raw_data <- .make_simple_raw_data(observations, raw_values)
-  timings[["creating_raw_table"]] <- .elapsed_seconds(stage_started)
-  .progress_stage_done(
-    progress, "creating raw table", timings[["creating_raw_table"]], total_started
-  )
-  issue_parts[[length(issue_parts) + 1L]] <- harmonised$issues
+    stage_started <- .extract_clock()
+    .progress_stage_start(progress, "creating raw table")
+    raw_data <- .bind_simple_parts(
+      raw_data_parts,
+      column_order = names(.simple_identifiers(observations))
+    )
+    raw_data <- .sync_simple_identifiers(raw_data, observations)
+    timings[["creating_raw_table"]] <- raw_table_seconds +
+      .elapsed_seconds(stage_started)
+    .progress_stage_done(
+      progress, "creating raw table", timings[["creating_raw_table"]], total_started
+    )
+  } else {
+    timings[["creating_cleaned_table"]] <- 0
+    timings[["creating_raw_table"]] <- 0
+  }
   issues <- .bind_rows(issue_parts, .empty_issues())
   dictionary_version <- react_dictionary_version()
   completeness <- if (nrow(issues) == 0L) "complete" else "partial"
@@ -708,6 +785,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
     key = c(
       "package_version", "dictionary_release", "dictionary_manifest_sha256",
       "source_type", "requested_rounds", "requested_families",
+      "output_mode", "long_tables_included",
       "observation_count", "data_column_count", "raw_data_column_count",
       "concept_output_column_count", "raw_value_count", "harmonised_value_count",
       "issue_count", "completeness"
@@ -719,12 +797,14 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
       source$kind,
       paste(requested_rounds, collapse = "|"),
       paste(families, collapse = "|"),
+      output,
+      if (include_long) "true" else "false",
       as.character(nrow(observations)),
-      as.character(ncol(data)),
-      as.character(ncol(raw_data)),
+      if (include_wide) as.character(ncol(data)) else "0",
+      if (include_wide) as.character(ncol(raw_data)) else "0",
       as.character(length(requested_output_columns)),
-      as.character(nrow(raw_values)),
-      as.character(nrow(harmonised$data)),
+      as.character(raw_value_count),
+      as.character(harmonised_value_count),
       as.character(nrow(issues)),
       completeness
     ),
@@ -750,16 +830,19 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
     )
     manifest <- rbind(manifest, synthetic_manifest)
   }
-  result <- list(
-    data = data,
-    raw_data = raw_data,
-    observations = observations,
-    raw_values = raw_values,
-    harmonised_values = harmonised$data,
-    column_dictionary = result_output_plan,
-    issues = issues,
-    manifest = manifest
-  )
+  result <- list()
+  if (include_wide) {
+    result$data <- data
+    result$raw_data <- raw_data
+  }
+  result$observations <- observations
+  if (include_long) {
+    result$raw_values <- raw_values
+    result$harmonised_values <- harmonised_values
+  }
+  result$column_dictionary <- result_output_plan
+  result$issues <- issues
+  result$manifest <- manifest
 
   stage_started <- .extract_clock()
   .progress_stage_start(progress, "validation")
@@ -771,5 +854,37 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
   .progress_stage_done(
     progress, "validation", timings[["validation"]], total_started
   )
+  class(result) <- c("react_extract_result", "list")
   result
+}
+
+#' Print an extraction result
+#'
+#' @param x A result returned by [react_extract()].
+#' @param ... Unused.
+#' @return `x`, invisibly.
+#' @export
+print.react_extract_result <- function(x, ...) {
+  metadata <- stats::setNames(x$manifest$value, x$manifest$key)
+  value <- function(key, fallback = "0") {
+    out <- unname(metadata[[key]])
+    if (is.null(out) || is.na(out) || !nzchar(out)) fallback else out
+  }
+  number <- function(key) {
+    prettyNum(as.numeric(value(key)), big.mark = ",", scientific = FALSE)
+  }
+  cat("<reactextract result>\n")
+  cat("  Output: ", value("output_mode", "both"), "\n", sep = "")
+  cat("  Observations: ", number("observation_count"), "\n", sep = "")
+  if (value("output_mode", "both") %in% c("wide", "both")) {
+    cat("  Harmonised table: ", number("data_column_count"), " columns\n", sep = "")
+    cat("  Raw table: ", number("raw_data_column_count"), " columns\n", sep = "")
+  }
+  if (value("output_mode", "both") %in% c("long", "both")) {
+    cat("  Raw long values: ", number("raw_value_count"), "\n", sep = "")
+    cat("  Harmonised long values: ", number("harmonised_value_count"), "\n", sep = "")
+  }
+  cat("  Issues: ", number("issue_count"), "\n", sep = "")
+  cat("  Approximate size: ", format(utils::object.size(x), units = "auto"), "\n", sep = "")
+  invisible(x)
 }

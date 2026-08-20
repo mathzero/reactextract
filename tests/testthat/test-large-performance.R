@@ -25,7 +25,8 @@ test_that("large multi-round extraction stays correct and reports useful progres
         families = "health/preexisting-conditions",
         rounds = names(rounds),
         concepts = "health.preexisting.overweight",
-        progress = TRUE
+        progress = TRUE,
+        output = "both"
       ),
       type = "message"
     )
@@ -104,7 +105,8 @@ test_that("acute symptoms and testing history receive source-preserving cleaned 
     react_files(rounds),
     families = "all",
     rounds = names(rounds),
-    concepts = concepts
+    concepts = concepts,
+    output = "both"
   )
 
   expect_equal(nrow(result$observations), 4L)
@@ -176,7 +178,8 @@ test_that("every reviewed feature topic produces cleaned output", {
     react_files(round_data),
     families = "all",
     rounds = names(round_data),
-    concepts = unique(representatives$primary_concept_id)
+    concepts = unique(representatives$primary_concept_id),
+    output = "both"
   )
 
   expect_setequal(unique(result$raw_values$taxonomy_id), topic_ids)

@@ -6,12 +6,15 @@
 #' @return The normalised output path, invisibly.
 #' @export
 react_write <- function(result, path, format = c("rds", "parquet")) {
-  if (!is.list(result) || !all(
-    c(
-      "data", "raw_data", "observations", "raw_values",
-      "harmonised_values", "column_dictionary", "issues", "manifest"
-    ) %in% names(result)
-  )) {
+  common <- c("observations", "column_dictionary", "issues", "manifest")
+  wide <- c("data", "raw_data")
+  long <- c("raw_values", "harmonised_values")
+  has_wide <- wide %in% names(result)
+  has_long <- long %in% names(result)
+  if (!is.list(result) || !all(common %in% names(result)) ||
+      (!all(has_wide) && !all(has_long)) ||
+      (any(has_wide) && !all(has_wide)) ||
+      (any(has_long) && !all(has_long))) {
     stop("`result` must be returned by `react_extract()`.", call. = FALSE)
   }
   format <- match.arg(format)
@@ -25,10 +28,8 @@ react_write <- function(result, path, format = c("rds", "parquet")) {
     stop("Parquet output requires the optional `arrow` package.", call. = FALSE)
   }
   dir.create(path, recursive = TRUE, showWarnings = FALSE)
-  tables <- c(
-    "data", "raw_data", "observations", "raw_values",
-    "harmonised_values", "column_dictionary", "issues", "manifest"
-  )
+  tables <- c(wide, "observations", long, "column_dictionary", "issues", "manifest")
+  tables <- tables[tables %in% names(result)]
   for (name in tables) {
     arrow::write_parquet(result[[name]], file.path(path, paste0(name, ".parquet")))
   }

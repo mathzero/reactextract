@@ -279,8 +279,16 @@
 #' @return Aggregate profile tables with no respondent identifiers.
 #' @export
 react_profile <- function(result, pairs = NULL) {
-  if (!is.list(result) || !all(c("raw_values", "harmonised_values", "manifest") %in% names(result))) {
+  if (!is.list(result) || !("manifest" %in% names(result))) {
     stop("`result` must be returned by `react_extract()`.", call. = FALSE)
+  }
+  if (!all(c("raw_values", "harmonised_values") %in% names(result))) {
+    stop(
+      "`react_profile()` requires detailed long values. Rerun `react_extract()` ",
+      "with `output = \"long\"` or `output = \"both\"`. For enclave-scale ",
+      "profiling, use `react_profile_source()`.",
+      call. = FALSE
+    )
   }
   values <- .analysis_values(result)
   dictionary <- react_dictionary()

@@ -3,7 +3,8 @@ test_that("file extraction returns long typed tables and safe identity links", {
   result <- react_extract(
     source,
     families = "health/preexisting-conditions",
-    rounds = c("REACT1_R01", "REACT2_S5_R06")
+    rounds = c("REACT1_R01", "REACT2_S5_R06"),
+    output = "both"
   )
 
   expect_equal(nrow(result$observations), 8L)
@@ -45,7 +46,8 @@ test_that("simple output retains requested rounds where a concept was not asked"
     react_files(list(react1.r05 = round)),
     families = "health/preexisting-conditions",
     rounds = "react1.r05",
-    concepts = "health.preexisting.overweight"
+    concepts = "health.preexisting.overweight",
+    output = "both"
   )
 
   expect_equal(nrow(result$data), 2L)
@@ -67,7 +69,8 @@ test_that("overweight pilot has one clean concept and exact raw-name columns", {
     react_files(rounds, crosswalk = fixture_crosswalk(2L)),
     families = "health/preexisting-conditions",
     concepts = "health.preexisting.overweight",
-    rounds = names(rounds)
+    rounds = names(rounds),
+    output = "both"
   )
 
   expect_equal(nrow(result$data), 10L)
@@ -89,7 +92,8 @@ test_that("literal NA text remains text while database missingness remains missi
     react_files(list(react1.r01 = round)),
     families = "consent-administration/survey-admin",
     rounds = "react1.r01",
-    concepts = "consent_administration.survey_admin.participant_identifier"
+    concepts = "consent_administration.survey_admin.participant_identifier",
+    output = "both"
   )
   values <- result$raw_values[result$raw_values$raw_variable == "U_PASSCODE", ]
 
@@ -105,7 +109,8 @@ test_that("partial files retain successful variables and report failures", {
   result <- react_extract(
     react_files(list(react1.r01 = round)),
     families = "health/preexisting-conditions",
-    rounds = "react1.r01"
+    rounds = "react1.r01",
+    output = "both"
   )
 
   expect_equal(nrow(result$observations), 2L)
@@ -138,7 +143,8 @@ test_that("unrecognised recode values are retained and flagged", {
     react_files(list(react1.r01 = round)),
     families = "health/preexisting-conditions",
     rounds = "react1.r01",
-    concepts = "health.preexisting.overweight"
+    concepts = "health.preexisting.overweight",
+    output = "both"
   )
   value <- result$harmonised_values
 
