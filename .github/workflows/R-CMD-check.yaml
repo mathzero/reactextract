@@ -28,5 +28,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: reactextract-offline-source
-          path: dist/reactextract-0.1.0-offline
+          path: dist/reactextract-*-offline
           if-no-files-found: error
