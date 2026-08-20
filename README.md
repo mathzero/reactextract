@@ -22,6 +22,8 @@ install.packages("reactextract_0.3.3.tar.gz", repos = NULL, type = "source")
 library(reactextract)
 ```
 
+Outside the enclave, install direct from github:
+
 ```r
 library(devtools)
 install_github("mathzero/reactextract")
