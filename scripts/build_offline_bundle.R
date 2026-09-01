@@ -21,16 +21,17 @@ copied <- c(
   file.copy(tarball, output, overwrite = TRUE),
   file.copy("renv.lock", output, overwrite = TRUE),
   file.copy("inst/ENCLAVE_INSTALL.md", output, overwrite = TRUE),
+  file.copy("inst/DERIVED_VARIABLES.md", output, overwrite = TRUE),
   file.copy("inst/enclave", output, recursive = TRUE, overwrite = TRUE)
 )
 if (!all(copied)) {
   stop("Failed to assemble one or more offline bundle files.", call. = FALSE)
 }
-baseline_profile <- file.path(output, "react-synthetic-profile-v4")
+baseline_profile <- file.path(output, "react-synthetic-profile-v5")
 dir.create(baseline_profile, recursive = TRUE, showWarnings = FALSE)
 utils::untar("inst/extdata/synthetic-profile.tar.gz", exdir = baseline_profile)
 if (!file.exists(file.path(baseline_profile, "manifest.csv"))) {
-  stop("Failed to include the approved baseline profile for targeted repair.", call. = FALSE)
+  stop("Failed to include the approved v5 synthetic profile.", call. = FALSE)
 }
 
 source("R/dictionary.R", local = TRUE)

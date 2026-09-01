@@ -1,6 +1,6 @@
 Package: reactextract
 Title: Extract Reviewed REACT Study Metadata and Data
-Version: 0.4.0
+Version: 0.5.6
 Authors@R: person("mathzero", email = "mathzero@users.noreply.github.com", role = c("aut", "cre"))
 Description: Extracts REACT-1 and REACT-2 variables from caller-managed
     Oracle connections or round files using a pinned, reviewed REACT metadata
@@ -23,8 +23,8 @@ Suggests:
     testthat (>= 3.0.0),
     withr
 Config/testthat/edition: 3
-Config/reactextract/dictionary-release: v1.0.0-rc9
-Config/reactextract/dictionary-manifest-sha256: 03a2fb41a02becbe292663934e6ed436a85335b93d5004118a82ea9e4460a846
+Config/reactextract/dictionary-release: v1.0.0-rc14
+Config/reactextract/dictionary-manifest-sha256: 28d03054e4b284cd44a040cf473991c441184739e84a7f6235392b1142a79236
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Config/roxygen2/version: 8.1.0

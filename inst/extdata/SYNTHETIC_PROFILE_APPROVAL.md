@@ -1,19 +1,21 @@
-# Formal approval: react-synthetic-profile-v4
+# Formal approval: react-synthetic-profile-v5
 
-The exact checksum-fixed `react-synthetic-profile-v4` aggregate
-profile received formal enclave disclosure approval from `mathzero` on
-2026-08-19.
+The exact checksum-fixed profile produced as
+`react-synthetic-profile-v5-candidate-corrected` and released as
+`react-synthetic-profile-v5` received formal enclave disclosure approval from
+`mathzero` on 2026-08-28.
 
 - Profile manifest SHA-256:
-  `fbf7bfc9453cb06a99284d0d5bc86d3bcd5fdc7f7d942561eaba2df7f99d6990`
+  `ac157927e065fe70ab951f4d8b3accece5f66c4a47b1a1d615354a4bc3c99a5a`
 - Profile archive SHA-256:
-  `8d581a7f340e8d7f12042c12a18adc1e902c59ad14a1f5110125f2f6c9460c0a`
+  `3bbf94e346682e0afb244dc5aebb71a04b95b925e720d55b5d13c2b448caf51a`
 - Approval scope: release of those exact disclosure-controlled aggregate-profile bytes.
 - External approval reference: not supplied.
 
 The profile contains disclosure-controlled round-specific aggregates. It does
 not contain respondent records, identifiers, raw free text or exact extrema.
-Its repaired release records that all-round distributions are unavailable;
-they must not be reconstructed by adding released round tables. Version 4
-corrects 168 categorical field-round occurrences: 151 from previously approved
-aggregate singleton bins and 17 from the targeted enclave query.
+Its release records that all-round distributions are unavailable; they must not
+be reconstructed by adding released round tables. Version 5 retains the
+approved marginal distributions, corrects the Ct/Cp and exact laboratory-result
+supports, and adds the two reviewed outcomes and 22 disclosure-controlled
+outcome–predictor dependency tables.

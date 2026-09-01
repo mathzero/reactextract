@@ -35,8 +35,15 @@
   .sha256_file(path)
 }
 
-.approved_profile_manifest_sha256 <- "fbf7bfc9453cb06a99284d0d5bc86d3bcd5fdc7f7d942561eaba2df7f99d6990"
-.approved_profile_archive_sha256 <- "8d581a7f340e8d7f12042c12a18adc1e902c59ad14a1f5110125f2f6c9460c0a"
+.approved_profile_manifest_sha256 <- "ac157927e065fe70ab951f4d8b3accece5f66c4a47b1a1d615354a4bc3c99a5a"
+.approved_profile_archive_sha256 <- "3bbf94e346682e0afb244dc5aebb71a04b95b925e720d55b5d13c2b448caf51a"
+
+.synthetic_profile_dictionary_compatibility <- function(metadata) {
+  profile_hash <- unname(metadata[["dictionary_manifest_sha256"]])
+  current_hash <- react_dictionary_version()$manifest_sha256[[1L]]
+  if (identical(profile_hash, current_hash)) return("exact")
+  "incompatible"
+}
 
 .approved_synthetic_profile <- function(refresh = FALSE) {
   if (!isTRUE(refresh) && !is.null(.reactextract_env$synthetic_profile)) {
@@ -79,16 +86,14 @@
   }
   profile <- react_read_profile(path)
   metadata <- .synthetic_profile_metadata(profile)
-  if (!identical(
-    unname(metadata[["dictionary_manifest_sha256"]]),
-    react_dictionary_version()$manifest_sha256[[1L]]
-  )) {
+  dictionary_compatibility <- .synthetic_profile_dictionary_compatibility(metadata)
+  if (identical(dictionary_compatibility, "incompatible")) {
     stop("Synthetic profile and dictionary hashes do not match.", call. = FALSE)
   }
   replace_keys <- c(
     "status", "disclosure_approval", "approval_date",
     "approval_confirmed_by", "approved_profile_manifest_sha256",
-    "profile_release"
+    "profile_release", "dictionary_compatibility"
   )
   profile$metadata <- profile$metadata[
     !(profile$metadata$key %in% replace_keys), , drop = FALSE
@@ -100,7 +105,8 @@
       value = c(
         "approved_for_release", "formally_approved",
         approval$approval_date[[1L]], approval$approval_confirmed_by[[1L]],
-        approval$profile_manifest_sha256[[1L]], approval$profile_release[[1L]]
+        approval$profile_manifest_sha256[[1L]], approval$profile_release[[1L]],
+        dictionary_compatibility
       ),
       stringsAsFactors = FALSE
     )
@@ -114,10 +120,9 @@
   dictionary <- react_dictionary()
   version <- react_dictionary_version()
   occurrence_ids <- dictionary$occurrences$occurrence_id
-  approved_specs <- dictionary$synthetic_profile_specs[
-    dictionary$synthetic_profile_specs$review_state == "approved" &
-      dictionary$synthetic_profile_specs$profile_kind %in%
-        c("categorical", "ordered_categorical"),
+  approved_specs <- .approved_profile_specs(dictionary)
+  approved_specs <- approved_specs[
+    approved_specs$profile_kind %in% c("categorical", "ordered_categorical"),
     , drop = FALSE
   ]
   categorical_rows <- lapply(seq_len(nrow(approved_specs)), function(index) {
@@ -145,6 +150,40 @@
   categorical$count <- 100
   categorical$suppressed <- FALSE
 
+  dependency_specs <- .dependency_specs(dictionary, dictionary$rounds$round_id)
+  outcome_rows <- lapply(unique(paste(dependency_specs$round_id,
+                                      dependency_specs$outcome_id, sep = "\r")), function(key) {
+    parts <- strsplit(key, "\r", fixed = TRUE)[[1L]]
+    levels <- .dependency_outcome_levels(parts[[2L]])
+    data.frame(
+      outcome_id = parts[[2L]], round_id = parts[[1L]], outcome_level = levels,
+      count = if (parts[[2L]] == "react1_pcr_positive") {
+        c(850, 100, 50)
+      } else c(650, 250, 50, 50),
+      suppressed = FALSE, stringsAsFactors = FALSE
+    )
+  })
+  outcome_counts <- .bind_rows(outcome_rows, data.frame())
+  dependency_rows <- lapply(seq_len(nrow(dependency_specs)), function(index) {
+    spec <- dependency_specs[index, , drop = FALSE]
+    outcomes <- .dependency_outcome_levels(spec$outcome_id[[1L]])
+    predictors <- .dependency_split_ids(spec$levels[[1L]])
+    grid <- expand.grid(
+      outcome_level = outcomes, predictor_level = predictors,
+      stringsAsFactors = FALSE
+    )
+    grid$count <- 100
+    if (length(predictors) > 1L) {
+      grid$count[grid$outcome_level == "positive" &
+                   grid$predictor_level == predictors[[2L]]] <- 300
+    }
+    data.frame(
+      dependency_id = spec$dependency_id[[1L]], round_id = spec$round_id[[1L]],
+      outcome_id = spec$outcome_id[[1L]], predictor_id = spec$predictor_id[[1L]],
+      grid, suppressed = FALSE, stringsAsFactors = FALSE
+    )
+  })
+
   profile <- list(
     metadata = data.frame(
       key = c(
@@ -165,13 +204,26 @@
       suppressed = FALSE,
       stringsAsFactors = FALSE
     ),
-    missingness = data.frame(
-      occurrence_id = dictionary$occurrences$occurrence_id,
-      round_id = dictionary$occurrences$round_id,
-      status = "database_missing",
-      count = 5,
-      suppressed = FALSE,
-      stringsAsFactors = FALSE
+    missingness = rbind(
+      data.frame(
+        occurrence_id = dictionary$occurrences$occurrence_id,
+        round_id = dictionary$occurrences$round_id,
+        status = "database_missing",
+        count = 5,
+        suppressed = FALSE,
+        stringsAsFactors = FALSE
+      ),
+      data.frame(
+        occurrence_id = dictionary$synthetic_profile_overrides$occurrence_id,
+        round_id = dictionary$occurrences$round_id[match(
+          dictionary$synthetic_profile_overrides$occurrence_id,
+          dictionary$occurrences$occurrence_id
+        )],
+        status = "coded: ",
+        count = 5,
+        suppressed = FALSE,
+        stringsAsFactors = FALSE
+      )
     ),
     categorical_counts = categorical,
     numeric_bin_counts = data.frame(
@@ -187,7 +239,10 @@
       routing_rule_id = character(), round_id = character(), status = character(),
       count = numeric(), suppressed = logical(), stringsAsFactors = FALSE
     ),
-    profile_specs = dictionary$synthetic_profile_specs,
+    outcome_counts = outcome_counts,
+    dependency_counts = .bind_rows(dependency_rows, data.frame()),
+    dependency_specs = dictionary$synthetic_dependencies,
+    profile_specs = .approved_profile_specs(dictionary),
     safe_bins = dictionary$safe_bins,
     issues = .empty_issues()
   )
@@ -270,8 +325,10 @@ react_synthetic <- function(profile = react_synthetic_profile(),
     )
   }
   dictionary_version <- react_dictionary_version()
-  if (!identical(unname(metadata[["dictionary_manifest_sha256"]]),
-                 dictionary_version$manifest_sha256)) {
+  if (identical(
+    .synthetic_profile_dictionary_compatibility(metadata),
+    "incompatible"
+  )) {
     stop("Synthetic profile and dictionary hashes do not match.", call. = FALSE)
   }
   seed <- as.integer(seed)
@@ -288,7 +345,8 @@ react_synthetic <- function(profile = react_synthetic_profile(),
       profile_sha256 = .profile_object_sha256(profile),
       n_per_round = counts,
       seed = seed,
-      safe_prior_fraction = as.numeric(metadata[["safe_prior_fraction"]])
+      safe_prior_fraction = as.numeric(metadata[["safe_prior_fraction"]]),
+      dependency_fallbacks = .synthetic_dependency_fallbacks(profile)
     ),
     class = c("react_synthetic_source", "react_source")
   )
@@ -416,11 +474,42 @@ react_synthetic <- function(profile = react_synthetic_profile(),
       lower_value <- if (nzchar(lower)) as.numeric(lower) else as.numeric(upper) - 10
       upper_value <- if (nzchar(upper)) as.numeric(upper) else lower_value + 100
     }
+    boundary_rule <- .safe_bin_boundary_rule(bins, bin_index)
+    lower_exclusive <- boundary_rule %in% c(
+      "lower_exclusive_upper_inclusive", "exclusive"
+    )
+    upper_exclusive <- boundary_rule %in% c(
+      "lower_inclusive_upper_exclusive", "exclusive"
+    )
     if (spec$profile_kind[[1L]] == "continuous") {
-      value[positions] <- stats::runif(length(positions), lower_value, upper_value)
+      generated <- stats::runif(length(positions), lower_value, upper_value)
+      if (lower_exclusive && lower_value == upper_value) {
+        stop("An exclusive continuous bin cannot have identical bounds.", call. = FALSE)
+      }
+      if (lower_exclusive) {
+        generated[generated <= lower_value] <-
+          lower_value + (upper_value - lower_value) / 2
+      }
+      if (!upper_exclusive && lower_value == upper_value) {
+        generated[] <- lower_value
+      }
+      value[positions] <- generated
     } else {
+      integer_lower <- if (lower_exclusive) {
+        floor(lower_value) + 1L
+      } else {
+        ceiling(lower_value)
+      }
+      integer_upper <- if (upper_exclusive) {
+        ceiling(upper_value) - 1L
+      } else {
+        floor(upper_value)
+      }
+      if (integer_lower > integer_upper) {
+        stop("A safe integer/date bin contains no permitted value.", call. = FALSE)
+      }
       value[positions] <- sample(
-        seq.int(ceiling(lower_value), floor(upper_value)),
+        seq.int(integer_lower, integer_upper),
         length(positions), replace = TRUE
       )
     }
@@ -759,7 +848,10 @@ react_synthetic <- function(profile = react_synthetic_profile(),
     data[[variable]] <- generated$value
     issues[[length(issues) + 1L]] <- generated$issues
   }
+  data <- .apply_synthetic_dependencies(data, occurrences, source, dictionary)
   data <- .apply_synthetic_routing(data, occurrences, dictionary)
+  data <- .reapply_synthetic_outcomes(data, occurrences, source, dictionary)
+  data <- .synchronise_synthetic_age_group(data, occurrences, dictionary)
   list(
     data = data,
     source_object = paste0("synthetic:", round_id),
@@ -767,17 +859,23 @@ react_synthetic <- function(profile = react_synthetic_profile(),
   )
 }
 
-.synthetic_generation_occurrences <- function(dictionary, selected, requested_rounds) {
+.synthetic_generation_occurrences <- function(dictionary, selected, requested_rounds,
+                                              source = NULL) {
+  dependency_occurrences <- if (!is.null(source)) {
+    .synthetic_dependency_occurrences(dictionary, source, requested_rounds)
+  } else {
+    dictionary$occurrences[0, , drop = FALSE]
+  }
   rules <- dictionary$routing_rules
   conditions <- dictionary$routing_conditions
   targets <- dictionary$routing_targets
   if (is.null(rules) || is.null(conditions) || is.null(targets) || nrow(rules) == 0L) {
-    return(selected)
+    return(unique(rbind(selected, dependency_occurrences)))
   }
   approved <- rules$routing_rule_id[rules$review_state == "approved"]
   conditions <- conditions[conditions$routing_rule_id %in% approved, , drop = FALSE]
   targets <- targets[targets$routing_rule_id %in% approved, , drop = FALSE]
-  needed <- selected$occurrence_id
+  needed <- unique(c(selected$occurrence_id, dependency_occurrences$occurrence_id))
   repeat {
     governing_rules <- unique(targets$routing_rule_id[targets$target_occurrence_id %in% needed])
     expanded <- unique(c(

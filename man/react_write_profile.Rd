@@ -9,7 +9,7 @@ react_write_profile(profile, path)
 \arguments{
 \item{profile}{A schema-2 profile after disclosure preparation.}
 
-\item{path}{A new or existing output directory.}
+\item{path}{A new or empty output directory.}
 }
 \value{
 Invisibly, the normalized profile directory.

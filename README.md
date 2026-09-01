@@ -18,9 +18,15 @@ The package covers REACT-1 rounds 1–19 and REACT-2 rounds 1–6.
 Inside the enclave, install the supplied offline source package:
 
 ```r
-install.packages("reactextract_0.4.0.tar.gz", repos = NULL, type = "source")
+install.packages("reactextract_0.5.6.tar.gz", repos = NULL, type = "source")
 library(reactextract)
 ```
+
+`reactextract` requires R 4.4.0 or later, with no artificial upper-version
+limit. Continuous integration checks R 4.4.1, R 4.5.1 and the current R
+release (currently R 4.6.x).
+The R version recorded in `renv.lock` identifies the environment used to lock
+the build and test dependencies; it is not a maximum supported R version.
 
 Outside the enclave, install direct from github:
 
@@ -74,6 +80,12 @@ The approved synthetic profile preserves:
 - reviewed public response codes and missing-value types;
 - approved questionnaire routing, including downstream questions; and
 - the same cleaning and harmonisation code used for real extraction.
+
+Version 0.5.6 uses the formally approved v5 profile. In addition to each
+field's round-specific distribution, it includes a small reviewed set of
+relationships centred on PCR positivity in REACT-1 and IgG antibody positivity
+in REACT-2. The result manifest records
+`synthetic_dependency_model = outcome_centred_v5` when these tables are used.
 
 Synthetic identifiers are newly created and visibly fictional. Real participant
 identifiers and respondent text are never included in the profile or generated
@@ -263,8 +275,12 @@ react_harmonisation_notes()
 react_harmonisation_decisions()
 ```
 
-The package does not calculate new measures such as BMI, household size,
-vaccination intervals or laboratory thresholds.
+The package does not automatically calculate analysis measures such as BMI,
+household size or laboratory thresholds. Optional, transparent REACT-1 code
+for established PCR positivity (`estbinres`), IMD quintile, fixed age groups,
+household size and BMI is provided in the
+[derived-variable recipes](inst/DERIVED_VARIABLES.md). Each recipe lists its
+exact raw inputs, round-specific decisions and known limitations.
 
 ## Progress and validation
 
@@ -292,15 +308,31 @@ Synthetic REACT data are designed for:
 - testing that code will accept the real result structure.
 
 The default generator uses the formally approved, disclosure-controlled
-`react-synthetic-profile-v4` round distributions. The package verifies the
-profile archive, its table manifest and the shared dictionary checksum before
-generating any values. A public-domain-only fallback remains available for
-package testing with `react_synthetic_profile(development = TRUE)`.
+`react-synthetic-profile-v5` round distributions. The package verifies the
+profile archive, its table manifest, the exact rc14 dictionary checksum and the
+approval record before generating any values. A public-domain-only fallback
+remains available for package testing with
+`react_synthetic_profile(development = TRUE)`.
 
-Neither form of synthetic data is suitable for prevalence estimation, hypothesis testing, power
-calculations or substantive scientific conclusions. The released aggregates
-are rounded and disclosure-controlled, and general relationships between
-variables are not modelled unless required by approved questionnaire routing.
+The v5 profile separates exact zero from positive Ct/Cp measurements,
+preserves occurrence-specific laboratory-result categories and the source's
+exact single-space missing value, and supplies the reviewed outcome-centred
+dependency tables. These relationships make the fictional data more useful for
+developing analyses of the studies' main outcomes; they are not a general model
+of the real joint data distribution.
+
+PCR profiling is deliberately strict and occurrence-specific. Exact `Not
+Detected` is negative in the common support; Round 11 also has the reviewed
+lowercase value `negative`. Round 2 `FINALRESULT = "Rejected"` and Round 13
+`RESULT = "ambiguous"` are missing/non-evaluable. These decisions apply only to
+those exact occurrences. Every unfamiliar label remains missing, is reported,
+and must be reviewed before it can enter the shared dictionary.
+
+Neither form of synthetic data is suitable for prevalence estimation,
+hypothesis testing, power calculations or substantive scientific conclusions.
+The released aggregates are rounded and disclosure-controlled. Apart from the
+reviewed outcome-centred dependencies and approved questionnaire routing,
+general relationships between variables are not modelled.
 
 ## Licences
 

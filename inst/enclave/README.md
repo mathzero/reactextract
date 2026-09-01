@@ -53,13 +53,59 @@ folder inside the enclave until it has passed the normal disclosure review.
 
 ## Synthetic generation profile
 
-### Approved categorical profile
+### Approved v5 outcome-dependency profile
 
-Version 0.4.0 includes the formally approved `react-synthetic-profile-v4`.
-The completed correction recovered 151 exact category distributions from
-previously approved singleton bins and queried only the remaining 17 fields.
-The correction script remains in the release for provenance, but it does not
-need to be rerun to use the bundled generator.
+Version 0.5.6 bundles the formally approved `react-synthetic-profile-v5`.
+It includes corrected Ct/Cp distributions, exact occurrence-specific
+`RESULT`/`FINALRESULT` categories, PCR positivity, IgG antibody positivity and
+22 selected outcome–predictor relationships. It is checksum-pinned to the rc14
+dictionary and works immediately with `react_synthetic()`.
+
+The commands below document how the approved profile was created. They do not
+need to be rerun for normal synthetic generation.
+
+The initial v5 candidate was built inside the enclave with:
+
+```sh
+Rscript enclave/build_synthetic_profile_v5.R connection.R react-synthetic-profile-v4 react-synthetic-profile-v5-candidate
+```
+
+The script queried changed distributions plus the small reviewed set of fields
+needed for the dependency tables and wrote aggregate counts only—never IDs or
+row-level data.
+
+### Correcting the first returned v5 candidate
+
+The first v5 candidate showed that exact source result values vary by
+occurrence. The approved supports retain exact spelling and case: Round 11
+lowercase `negative` is negative, while Round 2 `FINALRESULT = "Rejected"` and
+Round 13 `RESULT = "ambiguous"` are missing/non-evaluable. If that candidate has
+already been created, retain it and run the correction below instead of
+repeating the full marginal profile:
+
+```sh
+Rscript enclave/repair_synthetic_profile_v5_lab_results.R connection.R react-synthetic-profile-v5-candidate react-synthetic-profile-v5-candidate-corrected
+```
+
+Only the 37 `RESULT`/`FINALRESULT` marginal distributions are queried. The
+protected Ct/Cp tables are retained, while the affected REACT-1 outcome and
+dependency aggregates are recalculated with the occurrence-specific contract.
+The command stops if any source value falls outside the exact support approved
+for that round and field. The exact corrected output is the disclosed profile
+bundled in version 0.5.6.
+
+If it stops on an unreviewed value, run the targeted aggregate diagnostic:
+
+```sh
+Rscript enclave/diagnose_lab_result_values.R connection.R reactextract-lab-result-diagnostic
+```
+
+This queries only the three rejected round/field pairs and does not select
+identifiers or respondent rows. The enclave-only CSV contains exact counts and
+must remain inside the enclave. The separate review CSV suppresses counts below
+10 and rounds the rest to the nearest 5, but still needs normal disclosure
+approval before it is copied out. The diagnostic never trims, recases or recodes
+the source values.
 
 ### Complete profile build
 

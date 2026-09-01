@@ -1,4 +1,4 @@
-test_that("rc9 contains exactly the approved categorical corrections", {
+test_that("rc10 retains exactly the approved categorical corrections", {
   dictionary <- react_dictionary()
   specs <- dictionary$synthetic_profile_specs
   corrected <- specs[
@@ -30,7 +30,7 @@ test_that("rc9 contains exactly the approved categorical corrections", {
   )
 })
 
-test_that("approved v4 profile already implements the rc9 category policy", {
+test_that("approved v5 profile retains the corrected category policy", {
   archive <- system.file(
     "extdata", "synthetic-profile.tar.gz", package = "reactextract"
   )
@@ -39,10 +39,10 @@ test_that("approved v4 profile already implements the rc9 category policy", {
   untar(archive, exdir = path)
   profile <- react_read_profile(path)
   metadata <- stats::setNames(profile$metadata$value, profile$metadata$key)
-  expect_identical(unname(metadata[["dictionary_release"]]), "v1.0.0-rc9")
+  expect_identical(unname(metadata[["dictionary_release"]]), "v1.0.0-rc14")
   expect_identical(
     unname(metadata[["profile_version"]]),
-    "enclave-profile-v2-domain-corrected"
+    "enclave-profile-v5-outcome-dependencies-lab-results-corrected"
   )
   corrected_ids <- react_dictionary()$synthetic_profile_specs$occurrence_id[
     react_dictionary()$synthetic_profile_specs$support_source ==
@@ -93,23 +93,25 @@ test_that("administrative-only local options do not hide an inferred domain", {
   )
 })
 
-test_that("approved v4 records the exact 151 local and 17 source corrections", {
-  path <- tempfile("approved-v4-")
+test_that("approved v5 records its 50 Ct/Cp and 37 result repairs", {
+  path <- tempfile("approved-v5-")
   dir.create(path)
   archive <- system.file(
     "extdata", "synthetic-profile.tar.gz", package = "reactextract"
   )
   untar(archive, exdir = path)
   profile <- react_read_profile(path)
-  expect_equal(
-    sum(
-      profile$profiled_occurrences$status ==
-        "recovered_from_approved_singleton_bins"
-    ),
-    151L
-  )
-  expect_equal(
-    sum(profile$profiled_occurrences$status == "reprofiled_from_source"),
-    17L
-  )
+  expect_equal(nrow(profile$profiled_occurrences), 87L)
+  expect_equal(sum(profile$profiled_occurrences$profile_kind == "continuous"), 50L)
+  expect_equal(sum(profile$profiled_occurrences$profile_kind == "categorical"), 37L)
+  expect_true(all(
+    profile$profiled_occurrences$status[
+      profile$profiled_occurrences$profile_kind == "continuous"
+    ] == "requested"
+  ))
+  expect_true(all(
+    profile$profiled_occurrences$status[
+      profile$profiled_occurrences$profile_kind == "categorical"
+    ] == "corrected_occurrence_specific_lab_result_support"
+  ))
 })

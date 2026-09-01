@@ -39,7 +39,7 @@ test_that("synthetic extraction defaults to the compact wide result contract", {
   expect_match(paste(printed, collapse = "\n"), "Output: wide", fixed = TRUE)
 })
 
-test_that("the default profile is the formally approved v4 release", {
+test_that("the default profile is the formally approved v5 release", {
   approved <- react_synthetic_profile(refresh = TRUE)
   approved_metadata <- stats::setNames(
     approved$metadata$value, approved$metadata$key
@@ -47,12 +47,16 @@ test_that("the default profile is the formally approved v4 release", {
   expect_identical(unname(approved_metadata[["status"]]), "approved_for_release")
   expect_identical(
     unname(approved_metadata[["profile_release"]]),
-    "react-synthetic-profile-v4"
+    "react-synthetic-profile-v5"
   )
   expect_identical(
     unname(approved_metadata[["profile_version"]]),
-    "enclave-profile-v2-domain-corrected"
+    "enclave-profile-v5-outcome-dependencies-lab-results-corrected"
   )
+  expect_identical(unname(approved_metadata[["dictionary_compatibility"]]), "exact")
+  expect_equal(nrow(approved$outcome_counts), 81L)
+  expect_equal(nrow(approved$dependency_specs), 22L)
+  expect_gt(nrow(approved$dependency_counts), 0L)
 
   development <- react_synthetic_profile(development = TRUE)
   development_metadata <- stats::setNames(
@@ -285,6 +289,15 @@ test_that("profile source uses reviewed dispositions and exports no row data", {
   react_write_profile(safe, output)
   reread <- react_read_profile(output)
   expect_true(all(.profile_v2_required %in% names(reread)))
+  expect_error(
+    react_write_profile(safe, output),
+    "new or empty directory"
+  )
+  writeLines("not part of the profile", file.path(output, "unexpected.txt"))
+  expect_error(
+    react_read_profile(output),
+    "not covered by its manifest"
+  )
 })
 
 test_that("profile source refuses unreviewed profiling dispositions", {
@@ -416,14 +429,13 @@ test_that("issue counts receive suppression and rounding", {
     )
   )
   safe <- .sdc_issue_table(issues, react_sdc_policy())
-  expect_identical(safe$affected_count, c("15", ""))
+  expect_equal(nrow(safe), 1L)
+  expect_identical(safe$affected_count, "15")
 })
 
 test_that("profile policy rebasing identifies every changed safe occurrence", {
   dictionary <- react_dictionary()
-  specs <- dictionary$synthetic_profile_specs[
-    dictionary$synthetic_profile_specs$review_state == "approved", , drop = FALSE
-  ]
+  specs <- .approved_profile_specs(dictionary)
   candidate <- which(
     specs$profile_kind == "integer" &
       specs$generation_action == "empirical" &
@@ -461,7 +473,7 @@ test_that("profile policy rebasing identifies every changed safe occurrence", {
 
   profile$metadata$value <- c(
     "d0a0b467e3690e24da457227664db8c255afc5aa90790887be00a3e6658de3f0",
-    "fe4ced6a468b733688eac7129c346ac28c5b4f922036ad3747790251dbcd2c17"
+    "03a2fb41a02becbe292663934e6ed436a85335b93d5004118a82ea9e4460a846"
   )
   expect_identical(
     .profile_contract_rebase_ids(profile, dictionary)$changed_ids,

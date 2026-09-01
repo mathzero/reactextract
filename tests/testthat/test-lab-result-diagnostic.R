@@ -1,0 +1,23 @@
+test_that("the enclave lab-result diagnostic is aggregate and disclosure-aware", {
+  path <- system.file(
+    "enclave", "diagnose_lab_result_values.R", package = "reactextract"
+  )
+  expect_true(nzchar(path) && file.exists(path))
+  script <- paste(readLines(path, warn = FALSE), collapse = "\n")
+  expect_match(script, "GROUP BY RAW_VALUE", fixed = TRUE)
+  expect_match(script, "COUNT(*) AS EXACT_COUNT", fixed = TRUE)
+  expect_match(script, "LENGTHB", fixed = TRUE)
+  expect_match(script, "DUMP", fixed = TRUE)
+  expect_match(script, "exact_count < 10", fixed = TRUE)
+  expect_match(script, "round(review$exact_count / 5) * 5", fixed = TRUE)
+  expect_match(script, "lab-result-values-enclave-only.csv", fixed = TRUE)
+  expect_match(script, "lab-result-values-for-review.csv", fixed = TRUE)
+  expect_false(grepl("U_PASSCODE|SUBJECT_ID|SELECT [*]", script))
+  expect_match(script, "react1.r02", fixed = TRUE)
+  expect_match(script, "react1.r11", fixed = TRUE)
+  expect_match(script, "react1.r13", fixed = TRUE)
+  expect_match(script, "react1_pcr_lab_result_r02_final_v1", fixed = TRUE)
+  expect_match(script, "react1_pcr_lab_result_r11_result_v1", fixed = TRUE)
+  expect_match(script, "react1_pcr_lab_result_r13_result_v1", fixed = TRUE)
+  expect_match(script, "target_support", fixed = TRUE)
+})

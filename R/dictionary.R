@@ -1,5 +1,5 @@
-.dictionary_manifest_sha256 <- "03a2fb41a02becbe292663934e6ed436a85335b93d5004118a82ea9e4460a846"
-.dictionary_archive_sha256 <- "2bd26228dd1b0d32549315f007753a27104ac5ed204ea973d8ee525a0d6e86e4"
+.dictionary_manifest_sha256 <- "28d03054e4b284cd44a040cf473991c441184739e84a7f6235392b1142a79236"
+.dictionary_archive_sha256 <- "e3c3d44f30e71bf0203cd2edf9c73e4fd47240e486f25622b657ca7884873233"
 
 .sha256_file <- function(path) {
   if (requireNamespace("digest", quietly = TRUE)) {

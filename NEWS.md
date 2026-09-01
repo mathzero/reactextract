@@ -1,5 +1,120 @@
+# reactextract 0.5.6
+
+- Requires R 4.4.0 or later without an artificial upper-version bound. CI
+  checks R 4.4.1, R 4.5.1 and the current R release (currently R 4.6.x).
+- Removes the obsolete package-load ceiling that rejected otherwise compatible
+  installations on R 4.5 and later.
+- Tests the package on R 4.4, R 4.5 and the current R release in continuous
+  integration, with the offline artifact built once on the current release.
+
+# reactextract 0.5.5
+
+- Bundles the formally disclosure-approved `react-synthetic-profile-v5`,
+  checksum-pinned to dictionary release `v1.0.0-rc14`.
+- Enables the reviewed outcome-centred dependency model by default for PCR
+  positivity in REACT-1, IgG antibody positivity in REACT-2 and 22 selected
+  outcome–predictor relationships.
+- Generates exact occurrence-specific laboratory-result representations using
+  the approved Round 2 `Rejected`, Round 11 lowercase `negative` and Round 13
+  `ambiguous` decisions.
+- Removes the temporary rc9/v4 compatibility exception: the approved v5
+  profile must match the installed rc14 dictionary exactly.
+
+# reactextract 0.5.4
+
+- Pins three reviewed occurrence-specific PCR result supports without applying
+  global case conversion or name-based normalisation: Round 2 `FINALRESULT =
+  "Rejected"` and Round 13 `RESULT = "ambiguous"` are missing/non-evaluable,
+  while Round 11 `RESULT = "negative"` is negative.
+- Resolves exact laboratory-result meanings by occurrence ID. An exact value
+  approved in one round remains unknown everywhere else and fails closed to a
+  missing PCR outcome with an aggregate issue.
+- Validates targeted enclave repairs dynamically against each occurrence's
+  approved support instead of expecting the same four labels in every round.
+- Preserves the released mixture of exact raw representations during synthetic
+  generation and changes only the round's actual PCR outcome field (`RESULT`,
+  or `FINALRESULT` in Round 5).
+- Updates the documented `estbinres` recipe so unfamiliar labels and Round 13
+  `ambiguous` remain missing, while exact Round 11 lowercase `negative` maps to
+  zero.
+
+# reactextract 0.5.3
+
+- Fails closed for unfamiliar REACT-1 laboratory-result labels: only exact
+  `Not Detected` is PCR-negative, while every unreviewed value remains missing
+  and produces an aggregate issue record.
+- Adds an enclave-only aggregate diagnostic for the three rejected round/field
+  pairs. It exposes whitespace, Unicode code points, byte lengths and Oracle
+  byte dumps without selecting identifiers or respondent rows.
+- Writes separate enclave-only and disclosure-controlled review reports. Counts
+  below 10 are suppressed in the review report and all other counts are rounded
+  to the nearest 5.
+- Keeps the exact rejected values subject to human review; no case conversion,
+  trimming or automatic result recoding has been introduced.
+
+# reactextract 0.5.2
+
+- Preserves the exact single-space `RESULT`/`FINALRESULT` value documented by
+  the historical REACT-1 cleaner and profiles it as coded missing. It is never
+  trimmed, treated as PCR-negative, or sampled as a substantive result.
+- Corrects PCR outcome profiling so `Void`, exact single space, database
+  missingness and reviewed administrative missing codes remain missing.
+- Recalculates the REACT-1 outcome/dependency aggregates during the targeted
+  v5 repair; the first candidate's affected aggregates are no longer retained.
+- Makes repair failures identify the affected round, field and aggregate count
+  while continuing to reject every unreviewed exact source value.
+- Preserves the round-specific raw representation of missing PCR outcomes in
+  synthetic data instead of converting every missing outcome to `Void`.
+- Pins dictionary release `v1.0.0-rc13`.
+
+# reactextract 0.5.1
+
+- Corrects the exact REACT-1 negative laboratory-result label to
+  `Not Detected`; spelling and case are now preserved in synthetic raw data.
+- Rejects a v5 laboratory repair if any `RESULT` or `FINALRESULT` value falls
+  outside the three reviewed labels, preventing plausible outcome totals from
+  masking a broken raw distribution.
+- Adds a targeted enclave repair for the returned v5 candidate. It re-queries
+  only the 37 laboratory-result fields.
+- Pins dictionary release `v1.0.0-rc12`, which records this technical source-
+  label correction without changing the PCR positivity definition.
+
+# reactextract 0.5.0
+
+- Pins dictionary release `v1.0.0-rc11` with two reviewed central outcomes,
+  22 selected outcome–predictor relationships and categorical support for all
+  REACT-1 `RESULT`/`FINALRESULT` fields.
+- Adds `react_profile_dependencies_source()` and a one-command enclave v5
+  upgrade that profiles only changed Ct/laboratory distributions and the
+  reviewed dependency fields.
+- Applies two-dimensional primary and complementary suppression to every
+  outcome-by-predictor table before it can leave the enclave.
+- Generates coherent REACT-1 PCR result/Ct blocks and REACT-2 `NEWRESULT` /
+  `NEWRESULT_2` blocks when an approved v5 profile is supplied, then samples
+  the selected predictors conditionally on the outcome.
+- Records whether v5 dependencies were active in every synthetic extraction
+  manifest. The existing v4 profile remains usable but is explicitly reported
+  as not containing the new dependency tables.
+
+# reactextract 0.4.1
+
+- Pins dictionary release `v1.0.0-rc10`, which separates exact zero from
+  positive Ct/Cp measurements and uses the ordered bands 1–10, 11–20, 21–30,
+  31–40 and 41–50.
+- Adds a targeted enclave re-profile for the 50 affected round-specific fields;
+  all other approved aggregate distributions are retained unchanged.
+- Profiling and synthetic generation now honour explicit open and closed
+  fixed-bin boundaries, so decimal measurements cannot fall into a gap or the
+  wrong adjacent band.
+- The formally approved v4 profile remains usable during this targeted update;
+  its exact rc9-to-rc10 compatibility is recorded and limited to this reviewed
+  Ct/Cp contract transition.
+
 # reactextract 0.4.0
 
+- Adds a tested, documentation-only guide to optional REACT-1 derived-variable
+  recipes, including the round-specific historical `estbinres` definition,
+  IMD quintile, fixed age groups, household size and BMI.
 - `react_extract()` now defaults to efficient wide output containing the cleaned
   `data` and exact `raw_data` tables without retaining the very large detailed
   long tables.

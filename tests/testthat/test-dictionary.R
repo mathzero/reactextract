@@ -2,10 +2,10 @@ test_that("pinned dictionary verifies and exposes the fixed contract", {
   dictionary <- react_dictionary(refresh = TRUE)
   version <- react_dictionary_version()
 
-  expect_identical(version$dictionary_release, "v1.0.0-rc9")
+  expect_identical(version$dictionary_release, "v1.0.0-rc14")
   expect_identical(
     version$manifest_sha256,
-    "03a2fb41a02becbe292663934e6ed436a85335b93d5004118a82ea9e4460a846"
+    "28d03054e4b284cd44a040cf473991c441184739e84a7f6235392b1142a79236"
   )
   expect_equal(nrow(dictionary$rounds), 25L)
   expect_equal(nrow(dictionary$occurrences), 15093L)
@@ -25,6 +25,9 @@ test_that("pinned dictionary verifies and exposes the fixed contract", {
   expect_equal(nrow(dictionary$harmonisation_inputs), 543L)
   expect_equal(nrow(dictionary$instruments), 50L)
   expect_equal(nrow(dictionary$synthetic_profile_specs), 15093L)
+  expect_equal(nrow(dictionary$synthetic_outcomes), 2L)
+  expect_equal(nrow(dictionary$synthetic_dependencies), 22L)
+  expect_equal(nrow(dictionary$synthetic_profile_overrides), 37L)
   expect_equal(nrow(dictionary$routing_rules), 1989L)
   expect_true(all(dictionary$routing_rules$review_state == "approved"))
   expect_true(all(dictionary$synthetic_profile_specs$review_state == "approved"))
@@ -76,7 +79,7 @@ test_that("shared synthetic methods and review contract are available offline", 
   )
   expect_match(
     paste(readLines(notes, warn = FALSE), collapse = "\n"),
-    "fbf7bfc9453cb06a99284d0d5bc86d3bcd5fdc7f7d942561eaba2df7f99d6990",
+    "ac157927e065fe70ab951f4d8b3accece5f66c4a47b1a1d615354a4bc3c99a5a",
     fixed = TRUE
   )
   dictionary <- react_dictionary()

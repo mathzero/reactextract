@@ -457,6 +457,82 @@ react_sdc_policy <- function(min_count = 10L, count_rounding = 5L,
   data
 }
 
+.sdc_dependency_table <- function(data, policy) {
+  if (!is.data.frame(data) || nrow(data) == 0L) return(data)
+  initially_suppressed <- if ("suppressed" %in% names(data)) {
+    !is.na(data$suppressed) & data$suppressed
+  } else {
+    rep(FALSE, nrow(data))
+  }
+  data$suppressed <- initially_suppressed
+  groups <- split(
+    seq_len(nrow(data)),
+    interaction(data[c("dependency_id", "round_id")], drop = TRUE, lex.order = TRUE)
+  )
+  for (indices in groups) {
+    counts <- suppressWarnings(as.numeric(data$count[indices]))
+    suppressed <- initially_suppressed[indices] |
+      is.na(counts) | counts < policy$min_count
+    repeat {
+      changed <- FALSE
+      outcome <- data$outcome_level[indices]
+      predictor <- data$predictor_level[indices]
+      for (level in unique(outcome)) {
+        local <- which(outcome == level)
+        if (sum(suppressed[local]) == 1L && any(!suppressed[local])) {
+          candidates <- local[!suppressed[local]]
+          suppressed[candidates[[which.min(counts[candidates])]]] <- TRUE
+          changed <- TRUE
+        }
+      }
+      for (level in unique(predictor)) {
+        local <- which(predictor == level)
+        if (sum(suppressed[local]) == 1L && any(!suppressed[local])) {
+          candidates <- local[!suppressed[local]]
+          suppressed[candidates[[which.min(counts[candidates])]]] <- TRUE
+          changed <- TRUE
+        }
+      }
+      if (!changed) break
+    }
+    data$suppressed[indices] <- suppressed
+  }
+  released <- round(as.numeric(data$count) / policy$count_rounding) * policy$count_rounding
+  released[data$suppressed] <- NA_real_
+  data$count <- released
+  data
+}
+
+.propagate_outcome_suppression <- function(dependency_counts, outcome_counts) {
+  required_outcome <- c(
+    "outcome_id", "round_id", "outcome_level", "count", "suppressed"
+  )
+  required_dependency <- c("outcome_id", "round_id", "outcome_level")
+  if (!is.data.frame(dependency_counts) || !nrow(dependency_counts) ||
+      !is.data.frame(outcome_counts) || !nrow(outcome_counts) ||
+      !all(required_outcome %in% names(outcome_counts)) ||
+      !all(required_dependency %in% names(dependency_counts))) {
+    return(dependency_counts)
+  }
+  protected <- (!is.na(outcome_counts$suppressed) & outcome_counts$suppressed) |
+    is.na(outcome_counts$count)
+  protected_key <- paste(
+    outcome_counts$outcome_id[protected], outcome_counts$round_id[protected],
+    outcome_counts$outcome_level[protected], sep = "\r"
+  )
+  dependency_key <- paste(
+    dependency_counts$outcome_id, dependency_counts$round_id,
+    dependency_counts$outcome_level, sep = "\r"
+  )
+  existing <- if ("suppressed" %in% names(dependency_counts)) {
+    !is.na(dependency_counts$suppressed) & dependency_counts$suppressed
+  } else {
+    rep(FALSE, nrow(dependency_counts))
+  }
+  dependency_counts$suppressed <- existing | dependency_key %in% protected_key
+  dependency_counts
+}
+
 .sdc_summary_table <- function(data, policy) {
   if (!is.data.frame(data) || nrow(data) == 0L) return(data)
   data$suppressed <- data$n < policy$min_count
@@ -485,6 +561,13 @@ react_sdc_policy <- function(min_count = 10L, count_rounding = 5L,
   if (!is.data.frame(data) || nrow(data) == 0L ||
       !"affected_count" %in% names(data)) return(data)
   counts <- suppressWarnings(as.numeric(data$affected_count))
+  present <- !is.na(counts)
+  # A retained row with a blank count would still reveal that a 1--9 person
+  # event occurred. Row absence therefore represents either zero or a
+  # primary-suppressed respondent-derived issue count.
+  keep <- !(present & counts < policy$min_count)
+  data <- data[keep, , drop = FALSE]
+  counts <- counts[keep]
   present <- !is.na(counts)
   released <- present & counts >= policy$min_count
   protected <- rep("", length(counts))
@@ -525,6 +608,17 @@ react_prepare_profile_export <- function(profile, policy = react_sdc_policy()) {
     out$routing_validation <- .sdc_count_table(
       out$routing_validation, c("routing_rule_id", "round_id"), policy
     )
+    if (is.data.frame(out$outcome_counts)) {
+      out$outcome_counts <- .sdc_count_table(
+        out$outcome_counts, c("outcome_id", "round_id"), policy
+      )
+    }
+    if (is.data.frame(out$dependency_counts)) {
+      out$dependency_counts <- .propagate_outcome_suppression(
+        out$dependency_counts, out$outcome_counts
+      )
+      out$dependency_counts <- .sdc_dependency_table(out$dependency_counts, policy)
+    }
     out$issues <- .sdc_issue_table(out$issues, policy)
     if (is.data.frame(out$overall_missingness)) {
       out$overall_missingness <- .sdc_count_table(

@@ -11,7 +11,8 @@ react_profile_source(
   batch_size = 50L,
   occurrence_ids = NULL,
   include_routing = is.null(occurrence_ids),
-  include_overall = is.null(occurrence_ids)
+  include_overall = is.null(occurrence_ids),
+  include_dependencies = is.null(occurrence_ids)
 )
 }
 \arguments{
@@ -30,6 +31,10 @@ targeted distribution repair when the existing routing table is retained.}
 
 \item{include_overall}{Create all-round raw-variable distributions from the
 unsuppressed aggregates. This is intended for a complete profile run.}
+
+\item{include_dependencies}{Profile the reviewed v5 outcome-centred
+dependencies. This makes one targeted field pull per round and never
+returns observation identifiers.}
 }
 \value{
 An unsuppressed schema-2 aggregate profile for

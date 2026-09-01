@@ -555,7 +555,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
   result_output_plan <- selected_output_plan
   requested_output_columns <- unique(selected_output_plan$output_column)
   generation_occurrences <- if (inherits(source, "react_synthetic_source")) {
-    .synthetic_generation_occurrences(dictionary, selected, requested_rounds)
+    .synthetic_generation_occurrences(dictionary, selected, requested_rounds, source)
   } else {
     selected
   }
@@ -815,7 +815,10 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
       key = c(
         "synthetic_seed", "synthetic_profile_version", "synthetic_profile_sha256",
         "synthetic_profile_status", "synthetic_requested_counts",
-        "synthetic_safe_prior_fraction", "synthetic_subject_model"
+        "synthetic_safe_prior_fraction", "synthetic_subject_model",
+        "synthetic_dependency_model", "synthetic_dependency_pair_count",
+        "synthetic_dependency_specification_sha256",
+        "synthetic_dependency_fallback_count", "synthetic_dependency_fallbacks"
       ),
       value = c(
         as.character(source$seed),
@@ -824,7 +827,16 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
         unname(source$profile_metadata[["status"]]),
         paste(paste(names(source$n_per_round), source$n_per_round, sep = "="), collapse = "|"),
         as.character(source$safe_prior_fraction),
-        "independent_subjects_visit_1"
+        "independent_subjects_visit_1",
+        if (.synthetic_dependencies_available(source)) "outcome_centred_v5" else "not_available_in_profile",
+        if (is.data.frame(source$profile$dependency_specs)) {
+          as.character(nrow(source$profile$dependency_specs))
+        } else "0",
+        if (is.data.frame(dictionary$synthetic_dependencies)) {
+          .profile_object_sha256(dictionary$synthetic_dependencies)
+        } else "",
+        as.character(length(source$dependency_fallbacks)),
+        paste(source$dependency_fallbacks, collapse = "|")
       ),
       stringsAsFactors = FALSE
     )

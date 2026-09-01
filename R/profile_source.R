@@ -24,6 +24,16 @@
       routing_rule_id = character(), round_id = character(), status = character(),
       count = integer(), stringsAsFactors = FALSE
     ),
+    outcome_counts = data.frame(
+      outcome_id = character(), round_id = character(), outcome_level = character(),
+      count = integer(), stringsAsFactors = FALSE
+    ),
+    dependency_counts = data.frame(
+      dependency_id = character(), round_id = character(), outcome_id = character(),
+      predictor_id = character(), outcome_level = character(),
+      predictor_level = character(), count = integer(), stringsAsFactors = FALSE
+    ),
+    dependency_specs = data.frame(),
     profile_specs = data.frame(),
     safe_bins = data.frame(),
     issues = .empty_issues()
@@ -53,11 +63,17 @@
 }
 
 .coded_missing_domain <- function(options, observed = NULL) {
-  local <- options[grepl(
+  reviewed_missing <- if ("outcome_state" %in% names(options)) {
+    !is.na(options$outcome_state) & options$outcome_state == "missing"
+  } else {
+    rep(FALSE, nrow(options))
+  }
+  local <- options[reviewed_missing | grepl(
     "not applicable|non-response|non response|missing|refus|prefer not|don't know|do not know|unknown",
     options$display_value,
     ignore.case = TRUE
   ), , drop = FALSE]
+  local <- local[c("return_value", "display_value")]
   fixed <- .administrative_missing_domain()
   present_codes <- unique(c(options$return_value, as.character(observed)))
   fixed <- fixed[fixed$return_value %in% present_codes, , drop = FALSE]
@@ -228,6 +244,22 @@
   as.numeric(parsed)
 }
 
+.safe_bin_boundary_rule <- function(bins, index) {
+  rule <- if ("boundary_rules" %in% names(bins)) {
+    bins$boundary_rules[[index]]
+  } else {
+    "inclusive"
+  }
+  allowed <- c(
+    "inclusive", "lower_exclusive_upper_inclusive",
+    "lower_inclusive_upper_exclusive", "exclusive"
+  )
+  if (!rule %in% allowed) {
+    stop("Unsupported safe-bin boundary rule: ", rule, ".", call. = FALSE)
+  }
+  rule
+}
+
 .bin_values <- function(value, bins, value_type) {
   if (nrow(bins) == 0L) return(rep(NA_character_, length(value)))
   numeric_value <- if (value_type == "date") {
@@ -245,7 +277,22 @@
     upper_value <- if (!nzchar(upper)) Inf else if (value_type == "date") {
       as.numeric(as.Date(upper))
     } else as.numeric(upper)
-    selected <- !is.na(numeric_value) & numeric_value >= lower_value & numeric_value <= upper_value
+    boundary_rule <- .safe_bin_boundary_rule(bins, index)
+    lower_selected <- if (boundary_rule %in% c(
+      "lower_exclusive_upper_inclusive", "exclusive"
+    )) {
+      numeric_value > lower_value
+    } else {
+      numeric_value >= lower_value
+    }
+    upper_selected <- if (boundary_rule %in% c(
+      "lower_inclusive_upper_exclusive", "exclusive"
+    )) {
+      numeric_value < upper_value
+    } else {
+      numeric_value <= upper_value
+    }
+    selected <- !is.na(numeric_value) & lower_selected & upper_selected
     out[selected & is.na(out)] <- bins$bin_id[[index]]
   }
   out
@@ -267,7 +314,45 @@
   rows[c("return_value", "display_value")]
 }
 
+.approved_profile_specs <- function(dictionary) {
+  specs <- dictionary$synthetic_profile_specs[
+    dictionary$synthetic_profile_specs$review_state == "approved", , drop = FALSE
+  ]
+  overrides <- dictionary$synthetic_profile_overrides
+  if (is.data.frame(overrides) && nrow(overrides)) {
+    overrides <- overrides[overrides$review_state == "approved", , drop = FALSE]
+    index <- match(overrides$occurrence_id, specs$occurrence_id)
+    matched <- !is.na(index)
+    specs$profile_kind[index[matched]] <- overrides$profile_kind[matched]
+    specs$generation_action[index[matched]] <- overrides$generation_action[matched]
+    specs$support_source[index[matched]] <- paste0(
+      "public_support:", overrides$support_id[matched]
+    )
+  }
+  specs
+}
+
 .profile_response_options <- function(occurrence, spec, dictionary) {
+  public_support <- length(spec$support_source) == 1L &&
+    is.character(spec$support_source[[1L]]) &&
+    !is.na(spec$support_source[[1L]]) &&
+    startsWith(spec$support_source[[1L]], "public_support:")
+  if (public_support) {
+    support_id <- sub("^public_support:", "", spec$support_source[[1L]])
+    rows <- dictionary$synthetic_public_supports[
+      dictionary$synthetic_public_supports$support_id == support_id &
+        dictionary$synthetic_public_supports$review_state == "approved", , drop = FALSE
+    ]
+    rows <- rows[order(suppressWarnings(as.integer(rows$sort_order))), , drop = FALSE]
+    result <- data.frame(
+      return_value = rows$raw_value, display_value = rows$label,
+      stringsAsFactors = FALSE
+    )
+    if ("outcome_state" %in% names(rows)) {
+      result$outcome_state <- rows$outcome_state
+    }
+    return(result)
+  }
   options <- .profile_occurrence_options(
     occurrence$occurrence_id[[1L]], dictionary
   )
@@ -675,13 +760,17 @@
 #'   targeted distribution repair when the existing routing table is retained.
 #' @param include_overall Create all-round raw-variable distributions from the
 #'   unsuppressed aggregates. This is intended for a complete profile run.
+#' @param include_dependencies Profile the reviewed v5 outcome-centred
+#'   dependencies. This makes one targeted field pull per round and never
+#'   returns observation identifiers.
 #' @return An unsuppressed schema-2 aggregate profile for
 #'   [react_prepare_profile_export()].
 #' @export
 react_profile_source <- function(source, rounds = "all", progress = interactive(),
                                  batch_size = 50L, occurrence_ids = NULL,
                                  include_routing = is.null(occurrence_ids),
-                                 include_overall = is.null(occurrence_ids)) {
+                                 include_overall = is.null(occurrence_ids),
+                                 include_dependencies = is.null(occurrence_ids)) {
   if (!inherits(source, c("react_oracle_source", "react_file_source"))) {
     stop("`source` must be created by `react_oracle()` or `react_files()`.", call. = FALSE)
   }
@@ -699,7 +788,7 @@ react_profile_source <- function(source, rounds = "all", progress = interactive(
 
   specs <- dictionary$synthetic_profile_specs
   if (is.null(specs)) stop("The pinned dictionary has no synthetic profile specifications.", call. = FALSE)
-  approved_specs <- specs[specs$review_state == "approved", , drop = FALSE]
+  approved_specs <- .approved_profile_specs(dictionary)
   if (nrow(approved_specs) == 0L) {
     stop(
       "The pinned dictionary has no approved profiling dispositions. Review schema-6 synthetic_profile_specs before enclave profiling.",
@@ -840,7 +929,7 @@ react_profile_source <- function(source, rounds = "all", progress = interactive(
     profile[[name]] <- .bind_rows(lapply(profile_parts, `[[`, name), profile[[name]])
   }
   profile$issues <- .bind_rows(c(issues, lapply(profile_parts, `[[`, "issues")), .empty_issues())
-  profile$profile_specs <- specs[specs$review_state == "approved", , drop = FALSE]
+  profile$profile_specs <- approved_specs
   profile$safe_bins <- dictionary$safe_bins[
     dictionary$safe_bins$review_state == "approved" &
       dictionary$safe_bins$bin_spec_id %in% required_bins,
@@ -851,10 +940,23 @@ react_profile_source <- function(source, rounds = "all", progress = interactive(
     totals <- .derive_overall_profile(
       profile,
       .bind_rows(all_profiled_occurrences, dictionary$occurrences[0, , drop = FALSE]),
-      specs[specs$review_state == "approved", , drop = FALSE],
+      approved_specs,
       dictionary
     )
     for (name in names(totals)) profile[[name]] <- totals[[name]]
+  }
+  if (isTRUE(include_dependencies)) {
+    dependency_profile <- .profile_dependency_tables(
+      source, requested_rounds, dictionary, progress = progress
+    )
+    profile$outcome_counts <- dependency_profile$outcome_counts
+    profile$dependency_counts <- dependency_profile$dependency_counts
+    profile$dependency_specs <- dictionary$synthetic_dependencies[
+      dictionary$synthetic_dependencies$review_state == "approved", , drop = FALSE
+    ]
+    profile$issues <- .bind_rows(
+      list(profile$issues, dependency_profile$issues), .empty_issues()
+    )
   }
   version <- react_dictionary_version()
   profile$metadata <- data.frame(
@@ -862,7 +964,8 @@ react_profile_source <- function(source, rounds = "all", progress = interactive(
       "profile_schema_version", "profile_version", "status", "package_version",
       "dictionary_release", "dictionary_manifest_sha256", "routing_specification_sha256",
       "elapsed_seconds", "profile_scope", "profiled_occurrence_count",
-      "overall_distributions", "safe_prior_fraction"
+      "overall_distributions", "safe_prior_fraction",
+      "dependency_specification_sha256", "dependency_tables"
     ),
     value = c(
       "2", "enclave-profile-v1", "enclave_internal_unsuppressed",
@@ -873,7 +976,11 @@ react_profile_source <- function(source, rounds = "all", progress = interactive(
       if (is.null(occurrence_ids)) "complete" else "targeted_repair",
       as.character(nrow(profile$profiled_occurrences)),
       if (isTRUE(include_overall)) "included_unsuppressed" else "not_requested",
-      "0.01"
+      "0.01",
+      if (is.data.frame(dictionary$synthetic_dependencies)) {
+        .profile_object_sha256(dictionary$synthetic_dependencies)
+      } else "",
+      if (isTRUE(include_dependencies)) "included_unsuppressed" else "not_requested"
     ),
     stringsAsFactors = FALSE
   )
@@ -890,13 +997,69 @@ react_profile_source <- function(source, rounds = "all", progress = interactive(
 .profile_v2_optional <- c(
   "profiled_occurrences", "distribution_groups", "overall_missingness",
   "overall_categorical_counts", "overall_numeric_bin_counts",
-  "overall_text_presence"
+  "overall_text_presence", "outcome_counts", "dependency_counts",
+  "dependency_specs"
 )
+
+#' Profile only the reviewed v5 synthetic dependencies inside the enclave
+#'
+#' This is the small, preferred re-profile for upgrading an already approved
+#' marginal profile. It fetches only the outcome and predictor fields named in
+#' the pinned dependency contract, round by round, and returns aggregate count
+#' tables with no observation identifiers.
+#'
+#' @inheritParams react_profile_source
+#' @return An unsuppressed schema-2 aggregate profile for
+#'   [react_prepare_profile_export()].
+#' @export
+react_profile_dependencies_source <- function(source, rounds = "all",
+                                               progress = interactive()) {
+  if (!inherits(source, c("react_oracle_source", "react_file_source"))) {
+    stop("`source` must be created by `react_oracle()` or `react_files()`.", call. = FALSE)
+  }
+  dictionary <- react_dictionary()
+  requested_rounds <- .resolve_rounds(rounds, dictionary$rounds)
+  started <- .extract_clock()
+  dependency_profile <- .profile_dependency_tables(
+    source, requested_rounds, dictionary, progress = progress
+  )
+  profile <- .profile_v2_empty()
+  profile$round_denominators <- dependency_profile$round_denominators
+  profile$outcome_counts <- dependency_profile$outcome_counts
+  profile$dependency_counts <- dependency_profile$dependency_counts
+  profile$dependency_specs <- dictionary$synthetic_dependencies[
+    dictionary$synthetic_dependencies$review_state == "approved", , drop = FALSE
+  ]
+  profile$profile_specs <- .approved_profile_specs(dictionary)
+  profile$safe_bins <- dictionary$safe_bins[
+    dictionary$safe_bins$review_state == "approved", , drop = FALSE
+  ]
+  profile$issues <- dependency_profile$issues
+  version <- react_dictionary_version()
+  profile$metadata <- data.frame(
+    key = c(
+      "profile_schema_version", "profile_version", "status", "package_version",
+      "dictionary_release", "dictionary_manifest_sha256",
+      "dependency_specification_sha256", "elapsed_seconds", "profile_scope",
+      "safe_prior_fraction"
+    ),
+    value = c(
+      "2", "enclave-profile-v5-dependencies", "enclave_internal_unsuppressed",
+      as.character(utils::packageVersion("reactextract")),
+      version$dictionary_release, version$manifest_sha256,
+      .profile_object_sha256(dictionary$synthetic_dependencies),
+      sprintf("%.3f", .elapsed_seconds(started)), "dependencies_only", "0.01"
+    ),
+    stringsAsFactors = FALSE
+  )
+  class(profile) <- c("react_profile_v2", "list")
+  profile
+}
 
 #' Write a versioned synthetic profile directory
 #'
 #' @param profile A schema-2 profile after disclosure preparation.
-#' @param path A new or existing output directory.
+#' @param path A new or empty output directory.
 #' @return Invisibly, the normalized profile directory.
 #' @export
 react_write_profile <- function(profile, path) {
@@ -904,6 +1067,14 @@ react_write_profile <- function(profile, path) {
     stop("`profile` must be a schema-2 reactextract profile.", call. = FALSE)
   }
   path <- .single_string(path, "path")
+  if (dir.exists(path) && length(list.files(
+    path, all.files = TRUE, no.. = TRUE
+  ))) {
+    stop(
+      "`path` must be a new or empty directory; existing profile files are never overwritten.",
+      call. = FALSE
+    )
+  }
   dir.create(path, recursive = TRUE, showWarnings = FALSE)
   optional_names <- intersect(.profile_v2_optional, names(profile))
   optional_names <- optional_names[vapply(optional_names, function(name) {
@@ -938,6 +1109,14 @@ react_write_profile <- function(profile, path) {
 react_read_profile <- function(path) {
   path <- normalizePath(.single_string(path, "path"), mustWork = TRUE)
   manifest <- .read_literal_csv(file.path(path, "manifest.csv"))
+  actual_files <- list.files(path, all.files = TRUE, no.. = TRUE)
+  expected_files <- c("manifest.csv", manifest$file)
+  if (!setequal(actual_files, expected_files)) {
+    stop(
+      "Synthetic profile directory contains files not covered by its manifest or is incomplete.",
+      call. = FALSE
+    )
+  }
   for (index in seq_len(nrow(manifest))) {
     file_path <- file.path(path, manifest$file[[index]])
     if (!file.exists(file_path) || .sha256_file(file_path) != manifest$sha256[[index]] ||
@@ -1111,17 +1290,50 @@ react_sanitise_profile <- function(profile, policy = react_sdc_policy()) {
       current_routing_hash,
       "70ba0bd048725b3763205a633988dcfee4789c275a9aab8d2659b72f7d9ecd83"
     )
+  approved_rc9_transition <-
+    identical(
+      base_dictionary_hash,
+      "03a2fb41a02becbe292663934e6ed436a85335b93d5004118a82ea9e4460a846"
+    ) &&
+    identical(
+      base_routing_hash,
+      "d0a0b467e3690e24da457227664db8c255afc5aa90790887be00a3e6658de3f0"
+    ) &&
+    identical(
+      current_dictionary_hash,
+      "28d03054e4b284cd44a040cf473991c441184739e84a7f6235392b1142a79236"
+    ) &&
+    identical(
+      current_routing_hash,
+      "70ba0bd048725b3763205a633988dcfee4789c275a9aab8d2659b72f7d9ecd83"
+    )
+  approved_rc11_transition <-
+    identical(
+      base_dictionary_hash,
+      "f8da578f8aa7827ab3c484ae964853b45aa24a053e20d0423b1e58b59e49410a"
+    ) &&
+    identical(
+      base_routing_hash,
+      "d0a0b467e3690e24da457227664db8c255afc5aa90790887be00a3e6658de3f0"
+    ) &&
+    identical(
+      current_dictionary_hash,
+      "28d03054e4b284cd44a040cf473991c441184739e84a7f6235392b1142a79236"
+    ) &&
+    identical(
+      current_routing_hash,
+      "70ba0bd048725b3763205a633988dcfee4789c275a9aab8d2659b72f7d9ecd83"
+    )
   approved_predecessor_transition <-
-    approved_rc7_transition || approved_rc8_transition
+    approved_rc7_transition || approved_rc8_transition ||
+      approved_rc9_transition || approved_rc11_transition
   if (!routing_hash_matches && !approved_predecessor_transition) {
     stop(
       "The base profile cannot be reused because its reviewed routing contract changed.",
       call. = FALSE
     )
   }
-  current_specs <- dictionary$synthetic_profile_specs[
-    dictionary$synthetic_profile_specs$review_state == "approved", , drop = FALSE
-  ]
+  current_specs <- .approved_profile_specs(dictionary)
   old_specs <- profile$profile_specs
   if (!is.data.frame(old_specs) ||
       !setequal(old_specs$occurrence_id, current_specs$occurrence_id) ||
@@ -1173,14 +1385,236 @@ react_sanitise_profile <- function(profile, policy = react_sdc_policy()) {
       call. = FALSE
     )
   }
-  changed_ids <- current_specs$occurrence_id[changed]
+  # rc14 changes the exact contents of three occurrence-specific public
+  # supports while leaving the base profile's corresponding raw distributions
+  # obsolete. Those case-sensitive categories require an explicit source
+  # repair when rebasing an rc11 profile.
+  public_support_changed_ids <- if (approved_rc11_transition) {
+    dictionary$synthetic_profile_overrides$occurrence_id
+  } else {
+    character()
+  }
+  changed_ids <- unique(c(
+    current_specs$occurrence_id[changed], public_support_changed_ids
+  ))
   requires_query <- changed &
     current_specs$profile_kind != "identifier" &
     !(current_specs$generation_action %in% c("synthetic_identifier", "excluded"))
   list(
     changed_ids = changed_ids,
-    repair_ids = current_specs$occurrence_id[requires_query]
+    repair_ids = unique(c(
+      current_specs$occurrence_id[requires_query], public_support_changed_ids
+    ))
   )
+}
+
+.validate_ct_profile_repair <- function(repair, occurrence_ids, round_ids) {
+  expected_bins <- c("zero", "1_10", "11_20", "21_30", "31_40", "41_50")
+  if (length(occurrence_ids) != 50L || length(round_ids) != 19L) {
+    stop("The reviewed Ct/Cp repair scope must contain 50 fields in 19 rounds.", call. = FALSE)
+  }
+  if (!is.list(repair) || !is.data.frame(repair$numeric_bin_counts) ||
+      !is.data.frame(repair$profiled_occurrences) ||
+      !is.data.frame(repair$round_denominators)) {
+    stop("The Ct/Cp repair has an incomplete profile structure.", call. = FALSE)
+  }
+  rows <- repair$numeric_bin_counts
+  complete_ids <- unique(rows$occurrence_id)
+  bin_sets <- split(rows$bin_id, rows$occurrence_id)
+  complete_bins <- length(bin_sets) == length(occurrence_ids) &&
+    all(vapply(
+      bin_sets,
+      function(values) length(values) == length(expected_bins) &&
+        !anyDuplicated(values) && setequal(values, expected_bins),
+      logical(1L)
+    ))
+  if (!setequal(complete_ids, occurrence_ids) ||
+      nrow(rows) != length(occurrence_ids) * length(expected_bins) ||
+      !complete_bins ||
+      !setequal(
+        repair$profiled_occurrences$occurrence_id[
+          repair$profiled_occurrences$occurrence_id %in% occurrence_ids
+        ],
+        occurrence_ids
+      )) {
+    stop(
+      "The Ct/Cp query did not return all six bands for all 50 fields; no repair was written.",
+      call. = FALSE
+    )
+  }
+  if (!setequal(repair$round_denominators$round_id, round_ids)) {
+    stop(
+      "The Ct/Cp query did not return a denominator for every affected round; no repair was written.",
+      call. = FALSE
+    )
+  }
+  outside <- is.data.frame(repair$issues) && nrow(repair$issues) > 0L &&
+    any(repair$issues$code == "value_outside_safe_bins")
+  if (outside) {
+    stop(
+      "One or more Ct/Cp values fell outside 0-50; review the fixed ranges before release.",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
+.validate_lab_result_profile_repair <- function(repair, occurrence_ids,
+                                                round_ids,
+                                                dictionary = react_dictionary()) {
+  if (length(occurrence_ids) != 37L || length(round_ids) != 19L) {
+    stop(
+      "The reviewed laboratory-result repair scope must contain 37 fields in 19 rounds.",
+      call. = FALSE
+    )
+  }
+  if (!is.list(repair) || !is.data.frame(repair$categorical_counts) ||
+      !is.data.frame(repair$profiled_occurrences) ||
+      !is.data.frame(repair$round_denominators) ||
+      !is.data.frame(repair$issues)) {
+    stop("The laboratory-result repair has an incomplete profile structure.", call. = FALSE)
+  }
+  rows <- repair$categorical_counts[
+    repair$categorical_counts$occurrence_id %in% occurrence_ids,
+    , drop = FALSE
+  ]
+  expected_support <- stats::setNames(lapply(
+    occurrence_ids, .lab_result_support, dictionary = dictionary
+  ), occurrence_ids)
+  value_sets <- split(rows$value, rows$occurrence_id)
+  complete_values <- length(value_sets) == length(occurrence_ids) &&
+    all(vapply(occurrence_ids, function(id) {
+      values <- value_sets[[id]]
+      expected <- expected_support[[id]]$raw_value
+      length(values) == length(expected) &&
+        !anyDuplicated(values) && setequal(values, expected)
+    }, logical(1L)))
+  profiled_ids <- repair$profiled_occurrences$occurrence_id[
+    repair$profiled_occurrences$occurrence_id %in% occurrence_ids
+  ]
+  expected_row_count <- sum(vapply(
+    expected_support, nrow, integer(1L)
+  ))
+  if (nrow(rows) != expected_row_count ||
+      !complete_values || !setequal(profiled_ids, occurrence_ids)) {
+    stop(
+      paste(
+        "The laboratory-result query did not return each occurrence's exact",
+        "approved support; expected", expected_row_count, "rows across 37 fields;",
+        "no repair was written."
+      ),
+      call. = FALSE
+    )
+  }
+  if (!setequal(repair$round_denominators$round_id, round_ids)) {
+    stop(
+      "The laboratory-result query did not return a denominator for every REACT-1 round; no repair was written.",
+      call. = FALSE
+    )
+  }
+  missing_statuses <- split(
+    repair$missingness$status[
+      repair$missingness$occurrence_id %in% occurrence_ids
+    ],
+    repair$missingness$occurrence_id[
+      repair$missingness$occurrence_id %in% occurrence_ids
+    ]
+  )
+  coded_complete <- all(vapply(occurrence_ids, function(id) {
+    support <- expected_support[[id]]
+    options <- data.frame(
+      return_value = support$raw_value,
+      display_value = support$label,
+      outcome_state = support$outcome_state,
+      stringsAsFactors = FALSE
+    )
+    expected <- paste0(
+      "coded:", .coded_missing_domain(options)$return_value
+    )
+    all(expected %in% missing_statuses[[id]])
+  }, logical(1L)))
+  if (!coded_complete) {
+    stop(
+      paste(
+        "One or more exact occurrence-specific missing result values were not",
+        "retained as coded missing; no repair was written."
+      ),
+      call. = FALSE
+    )
+  }
+  unrecognised <- repair$issues$code == "unrecognised_profile_code" &
+    repair$issues$round_id %in% round_ids &
+    repair$issues$variable %in% c("RESULT", "FINALRESULT")
+  unrecognised[is.na(unrecognised)] <- FALSE
+  outside <- is.data.frame(repair$missingness) &&
+    all(c("occurrence_id", "status") %in% names(repair$missingness)) &&
+    any(
+      repair$missingness$occurrence_id %in% occurrence_ids &
+        repair$missingness$status == "outside_safe_support"
+    )
+  if (any(unrecognised) || outside) {
+    detail_rows <- repair$issues[
+      unrecognised,
+      intersect(c("round_id", "variable", "affected_count"), names(repair$issues)),
+      drop = FALSE
+    ]
+    detail <- if (nrow(detail_rows)) {
+      paste(unique(paste0(
+        detail_rows$round_id, "/", detail_rows$variable,
+        ifelse(
+          nzchar(as.character(detail_rows$affected_count)),
+          paste0(" (", detail_rows$affected_count, " records)"), ""
+        )
+      )), collapse = ", ")
+    } else {
+      "one or more affected round/field pairs"
+    }
+    stop(
+      paste(
+        "RESULT/FINALRESULT contains a value outside its occurrence-specific",
+        "exact approved support in", detail,
+        "; no repair was written."
+      ),
+      call. = FALSE
+    )
+  }
+
+  profiled <- repair$profiled_occurrences[
+    match(occurrence_ids, repair$profiled_occurrences$occurrence_id),
+    , drop = FALSE
+  ]
+  denominator <- suppressWarnings(as.numeric(
+    repair$round_denominators$count[
+      match(profiled$round_id, repair$round_denominators$round_id)
+    ]
+  ))
+  category_total <- vapply(occurrence_ids, function(id) {
+    sum(suppressWarnings(as.numeric(rows$count[rows$occurrence_id == id])))
+  }, numeric(1L))
+  database_missing <- vapply(occurrence_ids, function(id) {
+    values <- suppressWarnings(as.numeric(repair$missingness$count[
+      repair$missingness$occurrence_id == id &
+        repair$missingness$status == "database_missing"
+    ]))
+    if (length(values)) sum(values) else NA_real_
+  }, numeric(1L))
+  reconciled <- category_total + database_missing
+  mismatch <- is.na(denominator) | is.na(reconciled) | reconciled != denominator
+  if (any(mismatch)) {
+    detail <- paste(
+      paste0(profiled$round_id[mismatch], "/", profiled$variable[mismatch]),
+      collapse = ", "
+    )
+    stop(
+      paste(
+        "Laboratory-result category and database-missing counts did not",
+        "reconcile to the round denominator for", detail,
+        "; no repair was written."
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
 }
 
 .recover_singleton_profile_categories <- function(profile) {
@@ -1197,9 +1631,9 @@ react_sanitise_profile <- function(profile, policy = react_sdc_policy()) {
   old_specs <- profile$profile_specs[
     match(changed_ids, profile$profile_specs$occurrence_id), , drop = FALSE
   ]
-  current_specs <- dictionary$synthetic_profile_specs[
-    match(changed_ids, dictionary$synthetic_profile_specs$occurrence_id),
-    , drop = FALSE
+  approved_specs <- .approved_profile_specs(dictionary)
+  current_specs <- approved_specs[
+    match(changed_ids, approved_specs$occurrence_id), , drop = FALSE
   ]
   occurrences <- dictionary$occurrences[
     match(changed_ids, dictionary$occurrences$occurrence_id), , drop = FALSE
@@ -1429,9 +1863,7 @@ react_repair_profile <- function(profile, repair, policy = react_sdc_policy()) {
   for (name in setdiff(.profile_v2_optional, "profiled_occurrences")) out[[name]] <- NULL
 
   if (rebased) {
-    out$profile_specs <- dictionary$synthetic_profile_specs[
-      dictionary$synthetic_profile_specs$review_state == "approved", , drop = FALSE
-    ]
+    out$profile_specs <- .approved_profile_specs(dictionary)
     required_bins <- unique(out$profile_specs$bin_spec_id[nzchar(out$profile_specs$bin_spec_id)])
     out$safe_bins <- dictionary$safe_bins[
       dictionary$safe_bins$review_state == "approved" &
