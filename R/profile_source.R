@@ -971,14 +971,14 @@ react_profile_source <- function(source, rounds = "all", progress = interactive(
       "2", "enclave-profile-v1", "enclave_internal_unsuppressed",
       as.character(utils::packageVersion("reactextract")), version$dictionary_release,
       version$manifest_sha256,
-      if (!is.null(dictionary$routing_rules)) .profile_object_sha256(dictionary$routing_rules) else "",
+      if (!is.null(dictionary$routing_rules)) .routing_specification_sha256(dictionary) else "",
       sprintf("%.3f", .elapsed_seconds(started)),
       if (is.null(occurrence_ids)) "complete" else "targeted_repair",
       as.character(nrow(profile$profiled_occurrences)),
       if (isTRUE(include_overall)) "included_unsuppressed" else "not_requested",
       "0.01",
       if (is.data.frame(dictionary$synthetic_dependencies)) {
-        .profile_object_sha256(dictionary$synthetic_dependencies)
+        .dependency_specification_sha256(dictionary)
       } else "",
       if (isTRUE(include_dependencies)) "included_unsuppressed" else "not_requested"
     ),
@@ -1047,7 +1047,7 @@ react_profile_dependencies_source <- function(source, rounds = "all",
       "2", "enclave-profile-v5-dependencies", "enclave_internal_unsuppressed",
       as.character(utils::packageVersion("reactextract")),
       version$dictionary_release, version$manifest_sha256,
-      .profile_object_sha256(dictionary$synthetic_dependencies),
+      .dependency_specification_sha256(dictionary),
       sprintf("%.3f", .elapsed_seconds(started)), "dependencies_only", "0.01"
     ),
     stringsAsFactors = FALSE
@@ -1245,88 +1245,88 @@ react_sanitise_profile <- function(profile, policy = react_sdc_policy()) {
   base_dictionary_hash <- unname(metadata[["dictionary_manifest_sha256"]])
   current_dictionary_hash <- react_dictionary_version()$manifest_sha256[[1L]]
   current_routing_hash <- if (!is.null(dictionary$routing_rules)) {
-    .profile_object_sha256(dictionary$routing_rules)
+    .routing_specification_sha256(dictionary)
   } else {
     ""
   }
   base_routing_hash <- unname(metadata[["routing_specification_sha256"]])
   routing_hash_matches <- identical(base_routing_hash, current_routing_hash)
-  # rc7, rc8 and rc9 contain byte-identical routing CSVs. The original profile
-  # used an R-object hash whose serialized representation is not stable enough
-  # to reproduce after rebuilding the package, so the exact reviewed
-  # predecessor transitions are recorded rather than weakening the check for
-  # arbitrary dictionary pairs.
+  # Older profiles used an R-object hash whose serialized representation changes
+  # between R releases. Current profiles use the verified source-CSV checksum;
+  # the exact reviewed predecessor hashes remain accepted only for the pinned
+  # dictionary transitions below.
+  equivalent_routing_hashes <- c(
+    "8917e0409df72c5014079e2764a8a693bb4b2f1649cc169aa6d55685627c0c6a",
+    "d0a0b467e3690e24da457227664db8c255afc5aa90790887be00a3e6658de3f0",
+    "70ba0bd048725b3763205a633988dcfee4789c275a9aab8d2659b72f7d9ecd83"
+  )
   approved_rc7_transition <-
     identical(
       base_dictionary_hash,
       "7bbb02df4ffb010185f68206dc81f39f6a308b3e97f64f97f5662765522638b3"
     ) &&
-    identical(
-      base_routing_hash,
-      "d0a0b467e3690e24da457227664db8c255afc5aa90790887be00a3e6658de3f0"
-    ) &&
+    base_routing_hash %in% equivalent_routing_hashes &&
     identical(
       current_dictionary_hash,
       "fe4ced6a468b733688eac7129c346ac28c5b4f922036ad3747790251dbcd2c17"
     ) &&
     identical(
       current_routing_hash,
-      "70ba0bd048725b3763205a633988dcfee4789c275a9aab8d2659b72f7d9ecd83"
+      "8917e0409df72c5014079e2764a8a693bb4b2f1649cc169aa6d55685627c0c6a"
     )
   approved_rc8_transition <-
     identical(
       base_dictionary_hash,
       "fe4ced6a468b733688eac7129c346ac28c5b4f922036ad3747790251dbcd2c17"
     ) &&
-    identical(
-      base_routing_hash,
-      "d0a0b467e3690e24da457227664db8c255afc5aa90790887be00a3e6658de3f0"
-    ) &&
+    base_routing_hash %in% equivalent_routing_hashes &&
     identical(
       current_dictionary_hash,
       "03a2fb41a02becbe292663934e6ed436a85335b93d5004118a82ea9e4460a846"
     ) &&
     identical(
       current_routing_hash,
-      "70ba0bd048725b3763205a633988dcfee4789c275a9aab8d2659b72f7d9ecd83"
+      "8917e0409df72c5014079e2764a8a693bb4b2f1649cc169aa6d55685627c0c6a"
     )
   approved_rc9_transition <-
     identical(
       base_dictionary_hash,
       "03a2fb41a02becbe292663934e6ed436a85335b93d5004118a82ea9e4460a846"
     ) &&
-    identical(
-      base_routing_hash,
-      "d0a0b467e3690e24da457227664db8c255afc5aa90790887be00a3e6658de3f0"
-    ) &&
+    base_routing_hash %in% equivalent_routing_hashes &&
     identical(
       current_dictionary_hash,
       "28d03054e4b284cd44a040cf473991c441184739e84a7f6235392b1142a79236"
     ) &&
     identical(
       current_routing_hash,
-      "70ba0bd048725b3763205a633988dcfee4789c275a9aab8d2659b72f7d9ecd83"
+      "8917e0409df72c5014079e2764a8a693bb4b2f1649cc169aa6d55685627c0c6a"
     )
   approved_rc11_transition <-
     identical(
       base_dictionary_hash,
       "f8da578f8aa7827ab3c484ae964853b45aa24a053e20d0423b1e58b59e49410a"
     ) &&
-    identical(
-      base_routing_hash,
-      "d0a0b467e3690e24da457227664db8c255afc5aa90790887be00a3e6658de3f0"
-    ) &&
+    base_routing_hash %in% equivalent_routing_hashes &&
     identical(
       current_dictionary_hash,
       "28d03054e4b284cd44a040cf473991c441184739e84a7f6235392b1142a79236"
     ) &&
     identical(
       current_routing_hash,
-      "70ba0bd048725b3763205a633988dcfee4789c275a9aab8d2659b72f7d9ecd83"
+      "8917e0409df72c5014079e2764a8a693bb4b2f1649cc169aa6d55685627c0c6a"
+    )
+  approved_same_dictionary_legacy_hash <-
+    identical(base_dictionary_hash, current_dictionary_hash) &&
+    base_routing_hash %in% equivalent_routing_hashes &&
+    identical(
+      current_routing_hash,
+      "8917e0409df72c5014079e2764a8a693bb4b2f1649cc169aa6d55685627c0c6a"
     )
   approved_predecessor_transition <-
     approved_rc7_transition || approved_rc8_transition ||
-      approved_rc9_transition || approved_rc11_transition
+      approved_rc9_transition || approved_rc11_transition ||
+      approved_same_dictionary_legacy_hash
   if (!routing_hash_matches && !approved_predecessor_transition) {
     stop(
       "The base profile cannot be reused because its reviewed routing contract changed.",
@@ -1763,7 +1763,7 @@ react_sanitise_profile <- function(profile, policy = react_sdc_policy()) {
         "enclave-profile-v2-singleton-recovery", as.character(utils::packageVersion("reactextract")),
         "requires_targeted_enclave_repair", "not_approved",
         version$dictionary_release, version$manifest_sha256,
-        .profile_object_sha256(dictionary$routing_rules),
+        .routing_specification_sha256(dictionary),
         "complete_with_local_singleton_recovery",
         as.character(length(recovered_ids)), as.character(length(recovered_ids)),
         as.character(length(remaining_ids)),
@@ -1893,7 +1893,7 @@ react_repair_profile <- function(profile, repair, policy = react_sdc_policy()) {
         ),
         value = c(
           version$dictionary_release, version$manifest_sha256,
-          .profile_object_sha256(dictionary$routing_rules)
+          .routing_specification_sha256(dictionary)
         ),
         stringsAsFactors = FALSE
       )

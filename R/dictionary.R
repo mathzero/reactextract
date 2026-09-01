@@ -109,6 +109,32 @@
   manifest
 }
 
+.dictionary_file_sha256 <- function(dictionary, file) {
+  manifest <- dictionary$manifest
+  if (!is.data.frame(manifest) ||
+      !all(c("file", "sha256") %in% names(manifest))) {
+    stop("The verified dictionary manifest is unavailable.", call. = FALSE)
+  }
+  index <- which(manifest$file == file)
+  if (length(index) != 1L || !nzchar(manifest$sha256[[index]])) {
+    stop(
+      "The verified dictionary manifest has no unique SHA-256 for `",
+      file,
+      "`.",
+      call. = FALSE
+    )
+  }
+  unname(manifest$sha256[[index]])
+}
+
+.routing_specification_sha256 <- function(dictionary = react_dictionary()) {
+  .dictionary_file_sha256(dictionary, "routing_rules.csv")
+}
+
+.dependency_specification_sha256 <- function(dictionary = react_dictionary()) {
+  .dictionary_file_sha256(dictionary, "synthetic_dependencies.csv")
+}
+
 #' Load the pinned REACT extraction dictionary
 #'
 #' The installed bundle is verified against its SHA-256 manifest before it is

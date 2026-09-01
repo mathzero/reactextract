@@ -53,6 +53,22 @@ test_that("pinned dictionary verifies and exposes the fixed contract", {
   ))
 })
 
+test_that("contract checksums come from verified dictionary source files", {
+  dictionary <- react_dictionary()
+  routing <- dictionary$manifest[
+    dictionary$manifest$file == "routing_rules.csv", , drop = FALSE
+  ]
+  dependencies <- dictionary$manifest[
+    dictionary$manifest$file == "synthetic_dependencies.csv", , drop = FALSE
+  ]
+
+  expect_identical(.routing_specification_sha256(dictionary), routing$sha256[[1L]])
+  expect_identical(
+    .dependency_specification_sha256(dictionary),
+    dependencies$sha256[[1L]]
+  )
+})
+
 test_that("shared harmonisation notes and decisions are available offline", {
   notes <- react_harmonisation_notes(open = FALSE)
   expect_true(file.exists(notes))

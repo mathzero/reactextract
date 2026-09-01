@@ -445,7 +445,7 @@ test_that("profile policy rebasing identifies every changed safe occurrence", {
     metadata = data.frame(
       key = c("routing_specification_sha256", "dictionary_manifest_sha256"),
       value = c(
-        .profile_object_sha256(dictionary$routing_rules),
+        .routing_specification_sha256(dictionary),
         react_dictionary_version()$manifest_sha256
       ),
       stringsAsFactors = FALSE
@@ -474,6 +474,33 @@ test_that("profile policy rebasing identifies every changed safe occurrence", {
   profile$metadata$value <- c(
     "d0a0b467e3690e24da457227664db8c255afc5aa90790887be00a3e6658de3f0",
     "03a2fb41a02becbe292663934e6ed436a85335b93d5004118a82ea9e4460a846"
+  )
+  expect_identical(
+    .profile_contract_rebase_ids(profile, dictionary)$changed_ids,
+    expected
+  )
+
+  profile$metadata$value <- c(
+    "70ba0bd048725b3763205a633988dcfee4789c275a9aab8d2659b72f7d9ecd83",
+    "03a2fb41a02becbe292663934e6ed436a85335b93d5004118a82ea9e4460a846"
+  )
+  expect_identical(
+    .profile_contract_rebase_ids(profile, dictionary)$changed_ids,
+    expected
+  )
+
+  profile$metadata$value <- c(
+    "d0a0b467e3690e24da457227664db8c255afc5aa90790887be00a3e6658de3f0",
+    react_dictionary_version()$manifest_sha256
+  )
+  expect_identical(
+    .profile_contract_rebase_ids(profile, dictionary)$changed_ids,
+    expected
+  )
+
+  profile$metadata$value <- c(
+    "70ba0bd048725b3763205a633988dcfee4789c275a9aab8d2659b72f7d9ecd83",
+    react_dictionary_version()$manifest_sha256
   )
   expect_identical(
     .profile_contract_rebase_ids(profile, dictionary)$changed_ids,

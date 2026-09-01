@@ -833,7 +833,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
           as.character(nrow(source$profile$dependency_specs))
         } else "0",
         if (is.data.frame(dictionary$synthetic_dependencies)) {
-          .profile_object_sha256(dictionary$synthetic_dependencies)
+          .dependency_specification_sha256(dictionary)
         } else "",
         as.character(length(source$dependency_fallbacks)),
         paste(source$dependency_fallbacks, collapse = "|")

@@ -4,6 +4,9 @@
   checks R 4.4.1, R 4.5.1 and the current R release (currently R 4.6.x).
 - Removes the obsolete package-load ceiling that rejected otherwise compatible
   installations on R 4.5 and later.
+- Uses the checksum-fixed dictionary source files for routing and dependency
+  contract hashes, avoiding R-version-specific serialized-object hashes while
+  retaining explicitly reviewed compatibility with earlier profile releases.
 - Tests the package on R 4.4, R 4.5 and the current R release in continuous
   integration, with the offline artifact built once on the current release.
 
