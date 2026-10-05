@@ -1,0 +1,7 @@
+"key","value"
+"schema_version","1"
+"release","synthetic-rules-v1"
+"dictionary_manifest_sha256","28d03054e4b284cd44a040cf473991c441184739e84a7f6235392b1142a79236"
+"age_context","NHS_age_proxy_not_observed_mail_group"
+"licence","CC BY 4.0"
+"attribution","REACT study questionnaire metadata, Imperial College London; curated in mathzero/react_wiki"

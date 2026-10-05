@@ -13,12 +13,98 @@ only the source of the data.
 
 The package covers REACT-1 rounds 1–19 and REACT-2 rounds 1–6.
 
+See [Relationships represented in synthetic REACT data](inst/SYNTHETIC_RELATIONSHIPS.md)
+for the captured dependencies, round coverage, limitations and links to published
+REACT research.
+
+## Participation preview
+
+Version **0.6.0.9005 is a development preview**, not the finished 0.6.0 release.
+Its default synthetic data use the new participation summaries:
+
+- shared `-77` values are aligned within the governed REACT-1 questionnaire
+  fields, while independent linked information and laboratory results remain;
+- NHS-derived `U_AGE` controls adult-only REACT-1 smoking/vaping eligibility;
+- 197 reviewed age/parent-carer/questionnaire conditions govern 772 field–round
+  combinations, including workplace contacts and vaccination follow-ups;
+- 109 reviewed vaccination, work, travel and contact options have additional age, gender or self-response
+  restrictions; unavailable options stay missing without erasing other answers;
+- `AGE` remains a separate questionnaire answer, not a copy of `U_AGE`;
+- REACT-2's shared nonresponse count is explicitly below ten in each round.
+  The preview assumes five cases in the original round population and divides
+  by its approved rounded total. This is labelled **assumed**, not measured;
+  it is not a quota of five records in your synthetic sample.
+
+Some distributions remain partly hidden. Valid public answer categories provide
+a small fallback. The shared-state approximation above is limited to an explicit
+`below_10` label; complementary suppression never implies a small count. Other
+hidden missingness counts remain unestimated. The denominator assumes the
+historical round population was unchanged between profiling runs. Questionnaire
+age is left missing when its conditional distribution is unavailable. The result's
+`issues` and `manifest` describe these limitations.
+
+The default now includes approved round-specific PCR/antibody models, conditional
+context and symptom tables, and outcome-conditioned Ct bins with zero separate.
+REACT-2 test attempts/completion are generated jointly with result states, then
+questionnaire rules are reapplied. Ct draws inconsistent with the reviewed PCR
+definition use an outcome-consistent fallback. Entirely suppressed conditional
+distributions retain the baseline draw; their counts are never reconstructed.
+
+Age and shared participation remain anchored to their separately approved
+context model, not resampled from the new tables. Nine held question rules,
+seven held vaccination options, three held quarantine options and other
+restrictions remain unfinished. Product/time-since-vaccination effects and
+general joint symptom patterns are not modelled. Low-prevalence relationships
+can be imprecise, and some supported-group mismatches remain documented.
+This preview is for testing code, not for scientific conclusions.
+
+The usual call is unchanged:
+
+```r
+fake <- react_extract(react_synthetic(n_per_round = 1000L, seed = 1L))
+fake$data     # harmonised rows × columns
+fake$raw_data # raw rows × columns
+```
+
+For reproducibility, the old model remains available through
+`react_synthetic(profile = react_synthetic_profile(version = "v5"))`.
+The new mode generates a fixed set of all fields within each requested round
+internally, even for a narrow request, to keep routing/context and overlapping
+values consistent. Only requested fields are returned; wide mode still processes
+one round at a time and does not retain the combined long tables. Fallback and
+guard counts are recorded in `issues` and `manifest`.
+
+Rules are stored once as 20 reusable condition patterns with exact field/round
+links, in a single small bundle shared with the wiki. Adding a reviewed rule
+normally changes these tables, not the R code. Detailed questionnaire evidence
+stays in the wiki. No extra dependencies are required.
+
+Use the usual workflow for the preview:
+
+```r
+fake_result <- react_extract(react_synthetic(n_per_round = 1000L, seed = 1L))
+fake_result$data
+fake_result$raw_data
+```
+
+To reproduce the previous model explicitly:
+
+```r
+v5_result <- react_extract(react_synthetic(
+  profile = react_synthetic_profile(version = "v5"),
+  n_per_round = 1000L, seed = 1L
+))
+```
+
+Real-data extraction is unchanged. Full working decisions are in
+[`inst/PARTICIPATION_V6_DECISIONS.md`](inst/PARTICIPATION_V6_DECISIONS.md).
+
 ## Install
 
 Inside the enclave, install the supplied offline source package:
 
 ```r
-install.packages("reactextract_0.5.6.tar.gz", repos = NULL, type = "source")
+install.packages("reactextract_0.6.0.9005.tar.gz", repos = NULL, type = "source")
 library(reactextract)
 ```
 
@@ -281,6 +367,15 @@ for established PCR positivity (`estbinres`), IMD quintile, fixed age groups,
 household size and BMI is provided in the
 [derived-variable recipes](inst/DERIVED_VARIABLES.md). Each recipe lists its
 exact raw inputs, round-specific decisions and known limitations.
+
+## Planned participation upgrade
+
+The [participation and eligibility decisions](inst/PARTICIPATION_V6_DECISIONS.md)
+record confirmed age definitions and working assumptions for the planned v6
+synthetic-data upgrade. They distinguish shared survey non-response from
+historical missing-code exceptions and explain the age-based mail-group proxy.
+These changes are **not yet applied by the released v5 generator**. The document
+is copied unchanged from the REACT wiki so both resources use the same decisions.
 
 ## Progress and validation
 

@@ -1063,6 +1063,9 @@ react_profile_dependencies_source <- function(source, rounds = "all",
 #' @return Invisibly, the normalized profile directory.
 #' @export
 react_write_profile <- function(profile, path) {
+  if(!is.null(profile$participation)) stop(
+    "The participation preview is a composite bundled profile. Use saveRDS() to preserve it, or reload react_synthetic_profile(); this CSV writer cannot preserve its participation inputs.",
+    call.=FALSE)
   if (!is.list(profile) || !all(.profile_v2_required %in% names(profile))) {
     stop("`profile` must be a schema-2 reactextract profile.", call. = FALSE)
   }

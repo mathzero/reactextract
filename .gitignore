@@ -11,4 +11,8 @@ dist/
 *.tar.gz
 !inst/extdata/dictionary.tar.gz
 !inst/extdata/synthetic-profile.tar.gz
+!inst/extdata/participation-profile.tar.gz
+!inst/extdata/eligibility-context.tar.gz
+!inst/extdata/response-options.tar.gz
+!inst/extdata/synthetic-rules.tar.gz
 *.Rcheck/

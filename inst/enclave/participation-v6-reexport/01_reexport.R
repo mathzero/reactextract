@@ -1,0 +1,12 @@
+# Select ONLY the saved aggregate checkpoint. Never select a participant dataset.
+source("00_load.R")
+message("Choose participation-v6-INTERNAL/conditional-profile-INTERNAL.rds from the ORIGINAL profile run.")
+checkpoint <- file.choose()
+if(basename(checkpoint)!="conditional-profile-INTERNAL.rds")
+  stop("Choose the file named conditional-profile-INTERNAL.rds inside participation-v6-INTERNAL.")
+message("Reading saved aggregate counts. No database queries will run.")
+internal_aggregates <- readRDS(checkpoint)
+compact_candidate <- pr6_reexport(internal_aggregates)
+pr6_write(compact_candidate,"react-participation-conditional-v2-candidate")
+message("Finished. Open react-participation-conditional-v2-candidate/AVAILABILITY.md first.")
+message("Obtain normal disclosure review for the new candidate. Keep the original INTERNAL folder and any saved R workspace inside the enclave.")

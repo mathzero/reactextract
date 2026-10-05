@@ -4,13 +4,21 @@
 \alias{react_synthetic_profile}
 \title{Load the bundled synthetic profile}
 \usage{
-react_synthetic_profile(development = FALSE, refresh = FALSE)
+react_synthetic_profile(
+  development = FALSE,
+  refresh = FALSE,
+  version = c("v6", "v5")
+)
 }
 \arguments{
 \item{development}{Use the public-domain development fallback instead of the
 approved aggregate profile.}
 
 \item{refresh}{Re-read and re-verify the approved bundled profile.}
+
+\item{version}{\code{"v6"} selects the participation preview using approved
+aggregates. \code{"v5"} preserves the previous generation model. The public
+development fallback is unchanged by this argument.}
 }
 \value{
 A schema-2 synthetic profile.
@@ -20,4 +28,13 @@ The default is the immutable, disclosure-approved aggregate profile bundled
 with the package. Set \code{development = TRUE} only to use the public-domain
 fallback that contains no enclave-derived distributions. No profile is
 downloaded at runtime.
+The v6 default in this development build is a participation preview, not the
+final 0.6.0 model. Its aggregate inputs, 197 context rules and 109 vaccination, work/travel/contact
+option restrictions are approved. Round-specific outcome models and protected
+conditional context/symptom/Ct tables are applied with explicit fallbacks.
+Held cases, other option restrictions and general correlations remain incomplete.
+A shared nonresponse count
+explicitly marked below ten uses an assumed count of five over the approved
+rounded round total; this is labelled in issues/manifest, not filled into the
+protected profile. Other suppression types do not imply a small count.
 }

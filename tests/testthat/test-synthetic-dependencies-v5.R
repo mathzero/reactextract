@@ -303,9 +303,9 @@ test_that("v5 conditional streams retain a reviewed outcome association", {
   )
 })
 
-test_that("the approved v5 profile enables dependencies by default", {
+test_that("the approved v5 profile retains its original dependencies", {
   result <- react_extract(
-    react_synthetic(n_per_round = c(REACT1_R01 = 20L), seed = 1L),
+    react_synthetic(react_synthetic_profile(version="v5"), n_per_round = c(REACT1_R01 = 20L), seed = 1L),
     concepts = "health.preexisting.overweight",
     rounds = "REACT1_R01", progress = FALSE
   )
@@ -323,7 +323,7 @@ test_that("the approved v5 profile enables dependencies by default", {
 
 test_that("approved v5 contains exact result supports and complete outcome tables", {
   dictionary <- react_dictionary()
-  profile <- react_synthetic_profile(refresh = TRUE)
+  profile <- react_synthetic_profile(refresh = TRUE, version="v5")
 
   decisions <- list(
     c("react1.r02", "FINALRESULT", "Rejected", "missing"),

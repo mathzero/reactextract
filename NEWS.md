@@ -1,3 +1,48 @@
+# reactextract 0.6.0.9005 (development preview)
+
+- Integrates checksum-pinned, user-approved models for all 25 rounds. Conditional
+  context, exact symptom and Ct draws feed the existing raw/harmonised pipeline.
+- Preserves suppressed cells as unknown, using explicit baseline fallbacks, not
+  zero counts or reconstruction. Published supports receive a 1% public prior.
+- Reapplies participation/eligibility after writes; keeps age/shared participation
+  anchored and jointly generates antibody result/completion branches. Records
+  Ct consistency repairs and all fallback counts.
+- Adds model integrity, all-round routing, output and deterministic-selection
+  tests. The explicit v5 profile remains unchanged.
+- This remains a development preview: held rules, product/timing effects, joint
+  symptom patterns and exact reproduction of all group distributions are not
+  claimed. Narrow requests now generate fixed full-round context internally.
+
+# reactextract 0.6.0.9004 (development preview)
+
+- Adds the approved D13 modelling assumption for shared questionnaire nonresponse
+  explicitly labelled `below_10`: five cases divided by the approved rounded
+  whole-round population, not five cases in each synthetic sample.
+- Distinguishes primary small-cell suppression from complementary/other
+  withholding. An unavailable or invalid denominator leaves the rate unestimated.
+- Records assumed rates, 0–9 count bounds with denominator rounding, denominator
+  provenance and the stable-snapshot assumption in the manifest and issues.
+- Keeps protected profile files, empirical-availability flags and all other
+  missing-count treatment unchanged. REACT-1 released-rate generation and the
+  explicit v5 model remain unchanged. Old cached preview profiles must be reloaded
+  so the changed modelling policy is not applied silently.
+- Does not resolve participation/outcome calibration or infer all true REACT-2
+  questionnaire nonresponse from the conservative shared-state definition.
+
+# reactextract 0.6.0.9003 (development preview)
+
+- Stores 197 question rules and 109 option restrictions as 20 reusable condition
+  patterns in one checksum-pinned bundle shared with the REACT wiki. Full evidence
+  stays in the wiki; no extra dependencies or public API changes.
+- Adds the 77 approved work/travel/contact restrictions. Three held Round 15
+  quarantine options remain excluded; no restrictions are copied to unrelated
+  ordinary leaving-home questions or the changed Round 19 section.
+- Uses one controlled condition evaluator and applies option restrictions before
+  their downstream questions. Shared questionnaire non-response retains priority.
+- Keeps explicit v5 generation reproducible and leaves enclave helper kits intact.
+- This remains a participation preview, not the final 0.6.0 model; held rules,
+  unestimated REACT-2 shared participation and outcome calibration remain visible.
+
 # reactextract 0.5.6
 
 - Requires R 4.4.0 or later without an artificial upper-version bound. CI

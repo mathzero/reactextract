@@ -264,20 +264,38 @@
 #' with the package. Set `development = TRUE` only to use the public-domain
 #' fallback that contains no enclave-derived distributions. No profile is
 #' downloaded at runtime.
+#' The v6 default in this development build is a participation preview, not the
+#' final 0.6.0 model. Its aggregate inputs, 197 context rules and 109 vaccination, work/travel/contact
+#' option restrictions are approved. Round-specific outcome models and protected
+#' conditional context/symptom/Ct tables are applied with explicit fallbacks.
+#' Held cases, other option restrictions and general correlations remain incomplete.
+#' A shared nonresponse count
+#' explicitly marked below ten uses an assumed count of five over the approved
+#' rounded round total; this is labelled in issues/manifest, not filled into the
+#' protected profile. Other suppression types do not imply a small count.
 #'
 #' @param development Use the public-domain development fallback instead of the
 #'   approved aggregate profile.
 #' @param refresh Re-read and re-verify the approved bundled profile.
+#' @param version `"v6"` selects the participation preview using approved
+#'   aggregates. `"v5"` preserves the previous generation model. The public
+#'   development fallback is unchanged by this argument.
 #' @return A schema-2 synthetic profile.
 #' @export
-react_synthetic_profile <- function(development = FALSE, refresh = FALSE) {
+react_synthetic_profile <- function(development = FALSE, refresh = FALSE,
+                                    version = c("v6", "v5")) {
+  version <- match.arg(version)
   if (!is.logical(development) || length(development) != 1L || is.na(development)) {
     stop("`development` must be one TRUE or FALSE value.", call. = FALSE)
   }
   if (!is.logical(refresh) || length(refresh) != 1L || is.na(refresh)) {
     stop("`refresh` must be one TRUE or FALSE value.", call. = FALSE)
   }
-  if (!development) return(.approved_synthetic_profile(refresh = refresh))
+  if (!development) {
+    profile <- .approved_synthetic_profile(refresh = refresh)
+    if(version == "v6") profile <- .participation_overlay(profile, refresh)
+    return(profile)
+  }
   .development_synthetic_profile()
 }
 
@@ -314,6 +332,27 @@ react_synthetic_profile <- function(development = FALSE, refresh = FALSE) {
 react_synthetic <- function(profile = react_synthetic_profile(),
                             n_per_round = 1000L, seed = 1L) {
   metadata <- .synthetic_profile_metadata(profile)
+  if("dependency_models_sha256" %in% names(metadata) || !is.null(profile$dependency_models)) {
+    if(!identical(unname(metadata["dependency_models_sha256"]),.dependency_models_sha256) ||
+        !identical(profile$dependency_models,.read_dependency_models())) stop("Approved dependency model inputs are missing or changed. Reload react_synthetic_profile().",call.=FALSE)
+  }
+  if("participation_status" %in% names(metadata) && is.null(profile$participation))
+    stop("Participation profile inputs are missing. Reload react_synthetic_profile(); do not use a partial CSV export.",call.=FALSE)
+  if (!is.null(profile$participation) &&
+      !identical(unname(metadata["participation_rate_policy"]), .participation_rate_policy))
+    stop("Participation rate policy is missing or changed. Reload react_synthetic_profile() with this package version.", call. = FALSE)
+  if ("eligibility_sha256" %in% names(metadata) &&
+      (!identical(metadata[["eligibility_sha256"]], .synthetic_rules_sha256) ||
+       !identical(profile$eligibility, .eligibility_context_contract())))
+    stop("Approved eligibility inputs are missing or changed. Reload react_synthetic_profile().", call. = FALSE)
+  if (!is.null(profile$eligibility) && !"eligibility_sha256" %in% names(metadata))
+    stop("Eligibility inputs require a pinned approval record.", call. = FALSE)
+  if ("response_options_sha256" %in% names(metadata) &&
+      (!identical(metadata[["response_options_sha256"]], .synthetic_rules_sha256) ||
+       !identical(profile$response_options, .response_options_contract())))
+    stop("Approved response-option inputs are missing or changed. Reload react_synthetic_profile().", call. = FALSE)
+  if (!is.null(profile$response_options) && !"response_options_sha256" %in% names(metadata))
+    stop("Response-option inputs require a pinned approval record.", call. = FALSE)
   if (!identical(unname(metadata[["profile_schema_version"]]), "2")) {
     stop("Synthetic generation requires profile schema version 2.", call. = FALSE)
   }
@@ -628,8 +667,15 @@ react_synthetic <- function(profile = react_synthetic_profile(),
   as.numeric(strsplit(content, ",", fixed = TRUE)[[1L]])
 }
 
-.condition_true <- function(value, operator, comparison_values_json) {
+.condition_true <- function(value, operator, comparison_values_json, strict_missing = FALSE) {
   comparison <- .parse_comparison_values(comparison_values_json)
+  if(strict_missing) {
+    numeric_value <- suppressWarnings(as.numeric(as.character(value)))
+    missing <- is.na(value) | (!is.na(numeric_value) & numeric_value < 0)
+    if(operator=="is_missing") return(missing)
+    if(operator=="not_missing") return(!missing)
+    value[missing] <- NA
+  }
   if (operator == "is_missing") return(is.na(value))
   if (operator == "not_missing") return(!is.na(value))
   if (operator == "selected_any") {
@@ -652,26 +698,13 @@ react_synthetic <- function(profile = react_synthetic_profile(),
   stop("Unsupported approved routing operator: ", operator, ".", call. = FALSE)
 }
 
-.gate_rule_eligibility <- function(data, rule_id, conditions, occurrence_variable) {
-  condition_rows <- conditions[conditions$routing_rule_id == rule_id, , drop = FALSE]
-  eligible <- rep(FALSE, nrow(data))
-  for (clause_id in unique(condition_rows$clause_id)) {
-    clause <- condition_rows[condition_rows$clause_id == clause_id, , drop = FALSE]
-    clause_result <- rep(TRUE, nrow(data))
-    for (index in seq_len(nrow(clause))) {
-      parent_variable <- occurrence_variable[[clause$parent_occurrence_id[[index]]]]
-      clause_result <- clause_result & .condition_true(
-        data[[parent_variable]], clause$operator[[index]],
-        clause$comparison_values_json[[index]]
-      )
-    }
-    eligible <- eligible | clause_result
-  }
-  eligible
+.gate_rule_eligibility <- function(data, rule_id, conditions, occurrence_variable,
+                                  strict_missing = FALSE) {
+  .evaluate_rule_conditions(data, rule_id, conditions, occurrence_variable, strict_missing = strict_missing)
 }
 
 .apply_synthetic_gate_rules <- function(data, rules, conditions, targets,
-                                        occurrence_variable) {
+                                        occurrence_variable, strict_missing = FALSE) {
   gate_ids <- rules$routing_rule_id[rules$rule_type %in% c("gate", "terminate", "other_text")]
   if (length(gate_ids) == 0L) return(data)
   gate_conditions <- conditions[conditions$routing_rule_id %in% gate_ids, , drop = FALSE]
@@ -697,7 +730,7 @@ react_synthetic <- function(profile = react_synthetic_profile(),
       eligible <- rep(FALSE, nrow(data))
       for (rule_id in governing_rules) {
         eligible <- eligible | .gate_rule_eligibility(
-          data, rule_id, gate_conditions, occurrence_variable
+          data, rule_id, gate_conditions, occurrence_variable, strict_missing
         )
       }
       target_variable <- occurrence_variable[[target_id]]
@@ -723,7 +756,7 @@ react_synthetic <- function(profile = react_synthetic_profile(),
   data
 }
 
-.apply_synthetic_routing <- function(data, occurrences, dictionary) {
+.apply_synthetic_routing <- function(data, occurrences, dictionary, strict_missing = FALSE) {
   rules <- dictionary$routing_rules
   conditions <- dictionary$routing_conditions
   targets <- dictionary$routing_targets
@@ -740,7 +773,7 @@ react_synthetic <- function(profile = react_synthetic_profile(),
   conditions <- conditions[conditions$routing_rule_id %in% rules$routing_rule_id, , drop = FALSE]
   targets <- targets[targets$routing_rule_id %in% rules$routing_rule_id, , drop = FALSE]
   occurrence_variable <- stats::setNames(occurrences$variable, occurrences$occurrence_id)
-  data <- .apply_synthetic_gate_rules(data, rules, conditions, targets, occurrence_variable)
+  data <- .apply_synthetic_gate_rules(data, rules, conditions, targets, occurrence_variable, strict_missing)
 
   constraint_rules <- rules[!rules$rule_type %in% c("gate", "terminate", "other_text"), , drop = FALSE]
   pending <- constraint_rules$routing_rule_id
@@ -757,7 +790,7 @@ react_synthetic <- function(profile = react_synthetic_profile(),
       target_variables <- unname(occurrence_variable[target_rows$target_occurrence_id])
       if (anyNA(c(parent_variables, target_variables)) ||
           !all(parent_variables %in% names(data))) next
-      eligible <- .gate_rule_eligibility(data, rule_id, conditions, occurrence_variable)
+      eligible <- .gate_rule_eligibility(data, rule_id, conditions, occurrence_variable, strict_missing)
       rule <- rules[rules$routing_rule_id == rule_id, , drop = FALSE]
       available_targets <- target_variables[target_variables %in% names(data)]
       rule_type <- rule$rule_type[[1L]]
@@ -829,6 +862,7 @@ react_synthetic <- function(profile = react_synthetic_profile(),
                       "No synthetic sample size was supplied for this round.", round_id)
     ))
   }
+  if(.has_participation(source)) return(.read_participation_round(source,registry_row,occurrences,dictionary))
   key <- registry_row$observation_key[[1L]]
   round_tag <- toupper(gsub("[.]", "-", round_id))
   data <- data.frame(
@@ -861,10 +895,24 @@ react_synthetic <- function(profile = react_synthetic_profile(),
 
 .synthetic_generation_occurrences <- function(dictionary, selected, requested_rounds,
                                               source = NULL) {
+  # The stage evidence scan and model parents must not depend on the user's
+  # selected family. Generation remains bounded to one round and only requested
+  # columns are returned. This also supplies symptom gates before final locking.
+  if(!is.null(source) && .has_dependency_models(source))
+    return(dictionary$occurrences[dictionary$occurrences$round_id %in% requested_rounds,,drop=FALSE])
+  if(!is.null(source) && .has_participation(source)) {
+    context <- dictionary$occurrences[dictionary$occurrences$round_id %in% requested_rounds &
+      dictionary$occurrences$variable %in% c("U_AGE","SFREPORTFIG"),,drop=FALSE]
+    selected <- unique(rbind(selected,context))
+  }
   dependency_occurrences <- if (!is.null(source)) {
     .synthetic_dependency_occurrences(dictionary, source, requested_rounds)
   } else {
     dictionary$occurrences[0, , drop = FALSE]
+  }
+  if (!is.null(source$profile$eligibility)) {
+    needed <- .eligibility_required_occurrences(dictionary, unique(rbind(selected, dependency_occurrences)), source$profile$eligibility, source$profile$response_options)
+    return(needed[needed$round_id %in% requested_rounds, , drop = FALSE])
   }
   rules <- dictionary$routing_rules
   conditions <- dictionary$routing_conditions

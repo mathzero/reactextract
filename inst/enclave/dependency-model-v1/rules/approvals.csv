@@ -1,0 +1,4 @@
+"decision_id","review_state","reviewed_by","review_date","approval_sha256","proposal_csv_sha256"
+"eligibility-context-v1-2026-09-24","approved","mathzero","2026-09-24","9c55c1cc884a2c5ec1c20debe06a57dd243081969e002eb859a37b59fdc6780b","f016bdfb9a9aa3e50c1b19a65c3cc2f65d736cda8a90e9f8bfff4f0766b3c621"
+"response-options-v1-2026-09-24","approved","mathzero","2026-09-24","ad8c32b3a16e652b4b2e959819e0b4f0fae28cfffdca8d5aacc5c387b5aba145","6aa22227db48664fe3d102c748c5bfbd9dee9ad9db823f9e66ebdce801993d7f"
+"response-options-v2-2026-09-25","approved","mathzero","2026-09-25","efd39ad4e239cf5c119d769fd8fa9c0a91084cadfba609871b4a1db8fdf138f6","a39620c90e63352d29bcac6e6f75b4e08378d3f85808de75023ee7a15b0c087b"

@@ -3,6 +3,44 @@
 This folder contains the first scripts to run after installing `reactextract`
 inside the REACT enclave.
 
+## Proposed v6 participation upgrade
+
+The [participation diagnostic kit](participation-v6/README.md) checks shared
+survey non-response, questionnaire stages, age restrictions and upstream
+mail-group fields. It runs with the existing 0.5.6 package. Follow its separate
+instructions; it does not replace the approved v5 profile or change generation.
+
+After the first run, use the [participation follow-up kit](participation-v6-followup/README.md).
+It reuses the original enclave-only aggregates where available and checks a
+short list of reporting flags, questionnaire fields, age and test-result
+availability. It saves aggregates before export preparation so an interrupted
+export does not require another database run. Do not repeat the all-field
+diagnostic merely to obtain this follow-up.
+
+The original diagnostic and corrected follow-up have now been reviewed. The
+researcher has confirmed the age definitions and authorised documented working
+judgements where historical administrative explanations are unavailable.
+See the shared [participation decisions](../PARTICIPATION_V6_DECISIONS.md).
+Do not repeat those diagnostics by default or wait for unavailable data owners:
+the next run is the [conditional participation profile](participation-v6-profile/README.md).
+It captures public response distributions by stage and NHS-age group, saves
+completed-round aggregate checkpoints, and prepares a disclosure-controlled
+candidate. Keep its INTERNAL folder in the enclave. The shared capture contract
+retains unresolved questionnaire conditions explicitly: this is not yet the
+complete route-conditioned profile v6 or a new generator release. Complete
+compound rules and refreshed outcome relationships remain delivery gates.
+
+After that capture, use the [compact re-export kit](participation-v6-reexport/README.md).
+It reuses `participation-v6-INTERNAL/conditional-profile-INTERNAL.rds`; no new
+database connection or package installation is needed. It combines redundant
+subdivisions before applying the same disclosure protections, and writes an
+availability report alongside the protected candidate. Keep the original saved
+summaries in the enclave. Do not repeat the capture or the unchanged first export
+script to repair the export layout. The compact candidate still needs normal
+disclosure review, remaining routing work and generator integration.
+
+## Initial acceptance checks
+
 1. Copy `connection.R.example` to a private working location as `connection.R`.
 2. Supply `REACT_DB_USER` and `REACT_DB_PASSWORD` through the enclave's approved
    environment or secret mechanism. Do not type credentials into a tracked file.

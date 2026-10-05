@@ -596,6 +596,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
     timings[["loading_subject_links"]], total_started
   )
   issue_parts <- list(crosswalk_result$issues, prepared_crosswalk$issues)
+  participation_summaries <- character()
   observation_parts <- list()
   raw_parts <- list()
   harmonised_parts <- list()
@@ -636,6 +637,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
       .read_file_round(source, registry_row, fields)
     }
     issue_parts[[length(issue_parts) + 1L]] <- fetched$issues
+    if(!is.null(fetched$participation_summary)) participation_summaries <- c(participation_summaries,fetched$participation_summary)
     if (is.null(fetched$data)) {
       round_timings[[gsub("[.]", "_", round_id)]] <- .elapsed_seconds(round_started)
       .progress_message(
@@ -677,6 +679,9 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
       dictionary,
       mappings = round_mappings,
       output_plan = round_output_plan
+    )
+    round_harmonised$data <- .participation_harmonised_reasons(
+      round_harmonised$data, observed$observations, fetched$missing_reasons
     )
     harmonising_seconds <- harmonising_seconds +
       .elapsed_seconds(harmonising_started)
@@ -828,7 +833,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
         paste(paste(names(source$n_per_round), source$n_per_round, sep = "="), collapse = "|"),
         as.character(source$safe_prior_fraction),
         "independent_subjects_visit_1",
-        if (.synthetic_dependencies_available(source)) "outcome_centred_v5" else "not_available_in_profile",
+        if (.has_participation(source)) "v5_independent_fields_participation_preview" else if (.synthetic_dependencies_available(source)) "outcome_centred_v5" else "not_available_in_profile",
         if (is.data.frame(source$profile$dependency_specs)) {
           as.character(nrow(source$profile$dependency_specs))
         } else "0",
@@ -841,6 +846,48 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
       stringsAsFactors = FALSE
     )
     manifest <- rbind(manifest, synthetic_manifest)
+    if(.has_participation(source)) {
+      p <- source$profile$participation
+      a <- p$availability
+      unavailable_empirical <- a$round_id[a$role=="shared_participation" & a$core_usable!="TRUE"]
+      rates <- lapply(requested_rounds, function(round) .participation_rate(source, round))
+      rate_status <- vapply(rates, function(x) x$status, character(1))
+      unestimated <- requested_rounds[rate_status == "unestimated"]
+      assumed <- requested_rounds[rate_status == "assumed_below_10"]
+      manifest <- rbind(manifest,data.frame(key=c(
+        "synthetic_participation_model","synthetic_participation_profile_sha256",
+        "synthetic_participation_unestimated_rounds","synthetic_participation_age_relationship",
+        "synthetic_eligibility_scope","synthetic_outcome_relationship_scope",
+        "synthetic_missingness_prior","synthetic_release_readiness","synthetic_participation_generated_summary"),value=c(
+        "shared_individual_state_with_documented_exceptions",.participation_archive_sha256,
+        paste(intersect(requested_rounds,unestimated),collapse="|"),"within_round_independence_assumption",
+        if (!is.null(source$profile$response_options)) "adult_smoking_plus_197_question_context_rules_and_109_option_restrictions_other_options_incomplete" else if (!is.null(source$profile$eligibility)) "adult_smoking_plus_197_approved_question_context_rules_options_incomplete" else "adult_smoking_plus_existing_gates_compound_context_incomplete",
+        if(.has_dependency_models(source)) "approved_round_specific_ridge_outcomes_conditional_context_symptoms_ct_with_final_guards" else "v5_independent_fields_only_questionnaire_relationships_not_refreshed",
+        "public_answer_prior_plus_explicit_below_10_shared_rate_assumption_other_hidden_counts_unestimated",
+        "preview_not_full_v6_acceptance",paste(participation_summaries,collapse="|"))))
+      manifest <- rbind(manifest, data.frame(key=c(
+        "synthetic_participation_assumed_rounds", "synthetic_participation_unavailable_empirical_rounds",
+        "synthetic_participation_rate_policy", "synthetic_participation_rate_details"), value=c(
+        paste(assumed,collapse="|"), paste(intersect(requested_rounds,unavailable_empirical),collapse="|"),
+        .participation_rate_policy, paste(vapply(seq_along(rates), function(i)
+          .participation_rate_description(rates[[i]], requested_rounds[i]), character(1)),collapse="|"))))
+      if (!is.null(source$profile$eligibility)) manifest <- rbind(manifest, data.frame(
+        key = c("synthetic_eligibility_sha256", "synthetic_eligibility_rules", "synthetic_eligibility_field_rounds", "synthetic_eligibility_calibration"),
+        value = c(.synthetic_rules_sha256, nrow(source$profile$eligibility$rules),
+          length(unique(source$profile$eligibility$targets$target_occurrence_id)),
+          "questionnaire_validity_not_new_eligible_response_counts")))
+      if (!is.null(source$profile$response_options)) manifest <- rbind(manifest, data.frame(
+        key = c("synthetic_response_options_sha256", "synthetic_response_option_field_rounds"),
+        value = c(.synthetic_rules_sha256, nrow(source$profile$response_options$targets))))
+      if (!is.null(source$profile$eligibility)) manifest <- rbind(manifest, data.frame(
+        key = c("synthetic_rules_sha256", "synthetic_rule_patterns"),
+        value = c(.synthetic_rules_sha256, .synthetic_rules_contract()$pattern_count)))
+      if(.has_dependency_models(source)) manifest <- rbind(manifest,data.frame(
+        key=c("synthetic_dependency_models_sha256","synthetic_dependency_model_version","synthetic_dependency_model_scope","synthetic_dependency_model_fallbacks"),
+        value=c(.dependency_models_sha256,"dependency-models-v1",
+          "all_fields_generated_per_requested_round_for_fixed_context_only_requested_fields_returned;age_and_shared_participation_anchored;product_and_elapsed_effects_excluded",
+          paste(issues$message[issues$code=="dependency_model_limits"],collapse="|"))))
+    }
   }
   result <- list()
   if (include_wide) {
@@ -887,6 +934,8 @@ print.react_extract_result <- function(x, ...) {
   }
   cat("<reactextract result>\n")
   cat("  Output: ", value("output_mode", "both"), "\n", sep = "")
+  if(value("synthetic_release_readiness","")=="preview_not_full_v6_acceptance")
+    cat("  Synthetic model: v6 participation preview (see issues and manifest)\n")
   cat("  Observations: ", number("observation_count"), "\n", sep = "")
   if (value("output_mode", "both") %in% c("wide", "both")) {
     cat("  Harmonised table: ", number("data_column_count"), " columns\n", sep = "")

@@ -1,0 +1,2 @@
+artifact,sha256,approval_status,approval_confirmed_by,approval_evidence,scope,runtime_status
+dependency-models-v1.rds,37c83acbfab4a4bf86a09755f6339648636b7f55357cd0ca7a8e0e2d892ad698,formally_approved,mathzero,"User acting as within-enclave reviewer: I am happy. Proceed; subsequently supplied react-dependency-models-v1-approved",selected_model_parameters_and_protected_counts_for_synthetic_data_work,integrated_in_0.6.0.9005_preview

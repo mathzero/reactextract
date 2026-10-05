@@ -8,4 +8,9 @@
 ^renv\.lock$
 ^scripts$
 ^dist$
+^projects$
+^synthetic_multimodal_covid_data$
 ^reactextract\.Rproj$
+^\.Rproj\.user$
+^inst/extdata/eligibility-context\.tar\.gz$
+^inst/extdata/response-options\.tar\.gz$

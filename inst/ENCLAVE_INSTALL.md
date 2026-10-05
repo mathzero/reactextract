@@ -5,7 +5,7 @@ can be installed without contacting a package repository. Oracle and Parquet
 features use packages normally supplied by the enclave environment.
 
 ```r
-install.packages("reactextract_0.5.6.tar.gz", repos = NULL, type = "source")
+install.packages("reactextract_0.6.0.9005.tar.gz", repos = NULL, type = "source")
 
 stopifnot(getRversion() >= "4.4.0")
 stopifnot(requireNamespace("DBI", quietly = TRUE))
@@ -67,6 +67,38 @@ Only aggregate profiles prepared with `react_prepare_profile_export()` should be
 submitted for disclosure review.
 
 ## Synthetic-data profile
+
+### Participation preview
+
+Version 0.6.0.9005 is a development preview. It includes the approved compact
+participation summaries and uses them by default for synthetic generation.
+No new enclave pull is needed to try it. REACT-1 shared non-response and
+adult-only smoking/vaping eligibility are implemented. REACT-2 shared rates use
+an explicitly assumed count of five divided by the approved rounded round total
+where the shared count is marked below ten. This is not a recovered count or a
+five-record quota. Other suppression types remain unestimated; the published
+profiles are unchanged. The result manifest records the assumption, denominator
+and bounds, including the stable historical population assumption. The 197 approved question-level conditions now cover 772
+field–round combinations, with 109 additional option restrictions.
+Approved round-specific PCR/antibody models and conditional context/symptom/Ct
+tables are now active. Suppressed distributions use recorded baseline fallbacks;
+Ct/outcome and test-completion consistency are enforced alongside questionnaire
+rules. Age and shared participation retain the prior approved context model.
+Nine held rules, seven held vaccination options, three held quarantine options,
+other restrictions and broader joint symptom patterns remain unfinished. Inspect
+`result$issues` and `result$manifest`. No new enclave pull is needed.
+
+```r
+result <- react_extract(react_synthetic(n_per_round = 100L, seed = 1L))
+head(result$data)
+head(result$raw_data)
+```
+
+For unchanged v5 generation use
+`react_synthetic(profile = react_synthetic_profile(version = "v5"))`.
+This preview does not change Oracle/file extraction or its acceptance procedure.
+
+### Previous v5 profile
 
 Version 0.5.6 includes the formally approved
 `react-synthetic-profile-v5`. It supplies the corrected Ct/Cp distributions,

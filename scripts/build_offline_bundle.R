@@ -14,7 +14,7 @@ if (!file.exists(tarball)) stop("Built source tarball is missing.", call. = FALS
 
 output <- file.path("dist", paste0("reactextract-", description[1, "Version"], "-offline"))
 if (dir.exists(output)) {
-  unlink(output, recursive = TRUE)
+  stop("Offline output already exists; choose a fresh release/version. Existing enclave results were not touched.")
 }
 dir.create(output, recursive = TRUE, showWarnings = FALSE)
 copied <- c(
@@ -22,6 +22,9 @@ copied <- c(
   file.copy("renv.lock", output, overwrite = TRUE),
   file.copy("inst/ENCLAVE_INSTALL.md", output, overwrite = TRUE),
   file.copy("inst/DERIVED_VARIABLES.md", output, overwrite = TRUE),
+  file.copy("inst/PARTICIPATION_V6_DECISIONS.md", output, overwrite = TRUE),
+  file.copy("inst/extdata/dependency-models-v1.rds", output, overwrite = TRUE),
+  file.copy("inst/extdata/dependency-models-v1-approval.csv", output, overwrite = TRUE),
   file.copy("inst/enclave", output, recursive = TRUE, overwrite = TRUE)
 )
 if (!all(copied)) {
@@ -33,6 +36,14 @@ utils::untar("inst/extdata/synthetic-profile.tar.gz", exdir = baseline_profile)
 if (!file.exists(file.path(baseline_profile, "manifest.csv"))) {
   stop("Failed to include the approved v5 synthetic profile.", call. = FALSE)
 }
+participation <- file.path(output,"react-participation-conditional-v2-approved")
+dir.create(participation)
+utils::untar("inst/extdata/participation-profile.tar.gz",exdir=participation)
+if(!file.exists(file.path(participation,"approval.csv"))) stop("Participation approval record missing.")
+rules <- file.path(output,"synthetic-rules-v1")
+dir.create(rules)
+utils::untar("inst/extdata/synthetic-rules.tar.gz",exdir=rules)
+if(!file.exists(file.path(rules,"approvals.csv"))) stop("Questionnaire rule approval records missing.")
 
 source("R/dictionary.R", local = TRUE)
 files <- sort(list.files(output, recursive = TRUE, full.names = TRUE))

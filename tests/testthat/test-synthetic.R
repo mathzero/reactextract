@@ -39,8 +39,8 @@ test_that("synthetic extraction defaults to the compact wide result contract", {
   expect_match(paste(printed, collapse = "\n"), "Output: wide", fixed = TRUE)
 })
 
-test_that("the default profile is the formally approved v5 release", {
-  approved <- react_synthetic_profile(refresh = TRUE)
+test_that("the previous v5 profile remains explicitly available", {
+  approved <- react_synthetic_profile(refresh = TRUE, version = "v5")
   approved_metadata <- stats::setNames(
     approved$metadata$value, approved$metadata$key
   )
