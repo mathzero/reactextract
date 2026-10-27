@@ -14,6 +14,11 @@
 - `react_extract()` on a synthetic source created for only some rounds now
   returns those rounds by default, instead of failing with "subscript out of
   bounds". Explicitly requesting a round without records gives a clear error.
+- Rewrites the README for new users: the REACT studies, installation, a quick
+  start, choosing variables, reading the result, derived variables and what
+  synthetic data do and do not capture. Real-data extraction,
+  file sources, output options and harmonisation move to
+  `inst/ADVANCED_GUIDE.md`, which is also added to the offline bundle.
 - `react_synthetic_profile()` and `react_synthetic()` now default to the
   approved `v5` profile. The `v6` participation preview is opt-in via
   `version = "v6"`, shows a one-time notice and is labelled experimental: it
