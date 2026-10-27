@@ -12,7 +12,9 @@ test_that("the default synthetic profile gives plausible key distributions", {
       "people_households.demographics.gender",
       "people_households.demographics.ethnic_group",
       "people_households.demographics.country_of_birth",
+      "people_households.housing.area_deprivation_decile",
       "people_households.housing.area_deprivation_quintile",
+      "people_households.housing.residential_region",
       "behaviours_mobility.behaviours.current_cigarette_smoking"
     ),
     rounds = rounds,
@@ -51,6 +53,17 @@ test_that("the default synthetic profile gives plausible key distributions", {
     function(x) x == "England"
   )
   expect_gt(england, 0.6, label = "REACT1_R08 born-in-England share")
+
+  # Complementary suppression in the outcome tables must not erase large groups.
+  imd_quintile <- react_derive_imd_quintile(result)
+  region <- data$people_households.housing.residential_region__field__REGION
+  for (survey in c("REACT1_R08", "REACT1_R17")) {
+    keep <- data$survey_id == survey
+    expect_gt(mean(imd_quintile[keep] %in% 1L), 0.05,
+      label = paste(survey, "most-deprived IMD quintile share"))
+    expect_gt(mean(grepl("North East", region[keep], fixed = TRUE)), 0.02,
+      label = paste(survey, "North East share"))
+  }
 
   for (survey in c("REACT1_R08", "REACT1_R17")) {
     result_values <- raw$RESULT[raw$survey_id == survey]

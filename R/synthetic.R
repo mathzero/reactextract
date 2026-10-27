@@ -557,10 +557,12 @@ react_synthetic <- function(profile = react_synthetic_profile(),
       if (integer_lower > integer_upper) {
         stop("A safe integer/date bin contains no permitted value.", call. = FALSE)
       }
-      value[positions] <- sample(
-        seq.int(integer_lower, integer_upper),
-        length(positions), replace = TRUE
-      )
+      # Index the permitted values: sample(k) on a one-value bin would draw
+      # from 1:k instead of returning k.
+      permitted <- seq.int(integer_lower, integer_upper)
+      value[positions] <- permitted[sample.int(
+        length(permitted), length(positions), replace = TRUE
+      )]
     }
   }
   if (is_date) as.Date(value, origin = "1970-01-01") else value

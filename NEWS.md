@@ -22,6 +22,17 @@
 - Printing a `v5` extraction result no longer fails; the summary names the
   synthetic model in use.
 - `react_families()` no longer returns a duplicated `family` column.
+- Fixes integer bins that hold a single value (for example each IMD decile),
+  which drew from 1 to that value instead of returning it. Generated IMD deciles
+  now follow the approved counts instead of falling from about 24% (decile 1) to
+  about 1% (decile 10).
+- An outcome-conditional table with a suppressed predictor category no longer
+  erases that category. When the approved marginal implies the hidden category
+  is far larger than primary suppression allows (complementary suppression),
+  those rows keep their marginal draw. This restores, for example, the most
+  deprived IMD quintile and the North East region, which were almost absent.
+  No suppressed count is estimated. The approved REACT-1 age marginals withhold
+  ages 85 and over, so those ages remain almost absent from REACT-1 rounds.
 - Adds plausibility tests for key synthetic distributions (gender, ethnicity,
   country of birth, smoking, deprivation, PCR and IgG positivity), so that a
   profile with permuted or collapsed categories fails the test suite.

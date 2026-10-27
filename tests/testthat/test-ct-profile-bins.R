@@ -199,3 +199,29 @@ test_that("the enclave bundle contains the combined v5 profile script", {
   expect_match(text, "react_profile_dependencies_source", fixed = TRUE)
   expect_match(text, "requires_enclave_disclosure_review", fixed = TRUE)
 })
+
+test_that("single-value integer bins generate their own value", {
+  source <- react_synthetic(n_per_round = 1L, seed = 12L)
+  dictionary <- react_dictionary()
+  occurrence <- dictionary$occurrences[
+    dictionary$occurrences$variable == "IMD_DECILE" &
+      dictionary$occurrences$round_id == "react1.r17", , drop = FALSE
+  ]
+  spec <- source$profile$profile_specs[
+    source$profile$profile_specs$occurrence_id == occurrence$occurrence_id, ,
+    drop = FALSE
+  ]
+  counts <- source$profile$numeric_bin_counts[
+    source$profile$numeric_bin_counts$occurrence_id == occurrence$occurrence_id, ,
+    drop = FALSE
+  ]
+  released <- as.numeric(counts$count) / sum(as.numeric(counts$count))
+  names(released) <- sub("decile_", "", counts$bin_id, fixed = TRUE)
+
+  set.seed(3L)
+  value <- .synthetic_binned_value(source, occurrence, spec, 20000L)
+  generated <- prop.table(table(factor(value, levels = 1:10)))
+
+  expect_true(all(value %in% 1:10))
+  expect_lt(max(abs(generated - released[names(generated)])), 0.02)
+})
