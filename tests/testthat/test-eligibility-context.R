@@ -62,7 +62,7 @@ test_that("cycles are rejected instead of leaving unprocessed fields", {
 })
 
 test_that("the installed preview uses only pinned approved context rules", {
-  source <- react_synthetic(n_per_round = 1L)
+  source <- react_synthetic(v6_profile(), n_per_round = 1L)
   expect_equal(nrow(source$profile$eligibility$rules), 197L)
   expect_true(all(source$profile$eligibility$rules$review_state == "approved"))
   expect_equal(length(unique(source$profile$eligibility$targets$target_occurrence_id)), 772L)
@@ -76,7 +76,7 @@ test_that("the installed preview uses only pinned approved context rules", {
 })
 
 test_that("approved real-round gates survive generation, shared states and narrow selection", {
-  s <- react_synthetic(n_per_round = 30L, seed = 607L)
+  s <- react_synthetic(v6_profile(), n_per_round = 30L, seed = 607L)
   d <- react_dictionary(); contract <- s$profile$eligibility
   for (round in c("react1.r02", "react1.r04", "react1.r07", "react1.r08", "react1.r10", "react1.r14", "react1.r19")) {
     o <- d$occurrences[d$occurrences$round_id == round, , drop = FALSE]

@@ -926,7 +926,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
 print.react_extract_result <- function(x, ...) {
   metadata <- stats::setNames(x$manifest$value, x$manifest$key)
   value <- function(key, fallback = "0") {
-    out <- unname(metadata[[key]])
+    out <- if (key %in% names(metadata)) unname(metadata[[key]]) else NULL
     if (is.null(out) || is.na(out) || !nzchar(out)) fallback else out
   }
   number <- function(key) {
@@ -935,7 +935,9 @@ print.react_extract_result <- function(x, ...) {
   cat("<reactextract result>\n")
   cat("  Output: ", value("output_mode", "both"), "\n", sep = "")
   if(value("synthetic_release_readiness","")=="preview_not_full_v6_acceptance")
-    cat("  Synthetic model: v6 participation preview (see issues and manifest)\n")
+    cat("  Synthetic model: v6 experimental preview (see issues and manifest)\n")
+  else if (value("synthetic_dependency_model", "") == "outcome_centred_v5")
+    cat("  Synthetic model: v5 approved profile\n")
   cat("  Observations: ", number("observation_count"), "\n", sep = "")
   if (value("output_mode", "both") %in% c("wide", "both")) {
     cat("  Harmonised table: ", number("data_column_count"), " columns\n", sep = "")

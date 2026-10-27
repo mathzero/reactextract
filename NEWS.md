@@ -1,3 +1,20 @@
+# reactextract 0.6.0.9006 (development)
+
+- `react_synthetic_profile()` and `react_synthetic()` now default to the
+  approved `v5` profile. The `v6` participation preview is opt-in via
+  `version = "v6"`, shows a one-time notice and is labelled experimental: it
+  produces implausible distributions for several key variables (for example
+  ethnicity, deprivation quintile, smoking, country of birth and gender).
+- Fixes silent truncation of the bundled dictionary and synthetic-rule tables in
+  a C/ASCII locale, which is common in batch jobs. Previously only a handful of
+  rows were read, with a warning but no error.
+- Printing a `v5` extraction result no longer fails; the summary names the
+  synthetic model in use.
+- `react_families()` no longer returns a duplicated `family` column.
+- Adds plausibility tests for key synthetic distributions (gender, ethnicity,
+  country of birth, smoking, deprivation, PCR and IgG positivity), so that a
+  profile with permuted or collapsed categories fails the test suite.
+
 # reactextract 0.6.0.9005 (development preview)
 
 - Integrates checksum-pinned, user-approved models for all 25 rounds. Conditional

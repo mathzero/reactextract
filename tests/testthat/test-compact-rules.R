@@ -48,7 +48,7 @@ test_that("option restrictions propagate through downstream questions", {
 })
 
 test_that("all new restricted fields are reproducible in narrow requests", {
-  s <- react_synthetic(n_per_round=10L,seed=903L); d <- react_dictionary()
+  s <- react_synthetic(v6_profile(), n_per_round=10L,seed=903L); d <- react_dictionary()
   rules <- s$profile$response_options$rules
   ids <- rules$routing_rule_id[rules$decision_id=="response-options-v2-2026-09-25"]
   targets <- s$profile$response_options$targets
