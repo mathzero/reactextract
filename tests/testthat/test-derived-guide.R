@@ -27,20 +27,6 @@ derived_guide_chunks <- function() {
   chunks
 }
 
-load_derived_guide_functions <- function() {
-  chunks <- derived_guide_chunks()
-  function_chunk <- chunks[vapply(
-    chunks,
-    grepl,
-    logical(1),
-    pattern = "derive_react1_estbinres <- function",
-    fixed = TRUE
-  )][[1L]]
-  environment <- new.env(parent = baseenv())
-  eval(parse(text = function_chunk), envir = environment)
-  environment
-}
-
 test_that("all R snippets in the derived-variable guide parse", {
   path <- derived_guide_path()
   expect_true(file.exists(path))
@@ -52,8 +38,7 @@ test_that("all R snippets in the derived-variable guide parse", {
   ))
 })
 
-test_that("documented estbinres recipe preserves historical round rules", {
-  functions <- load_derived_guide_functions()
+test_that("estbinres derivation preserves historical round rules", {
   fixture <- data.frame(
     survey_id = c(
       rep("REACT1_R01", 3), rep("REACT1_R02", 4),
@@ -83,15 +68,14 @@ test_that("documented estbinres recipe preserves historical round rules", {
   )
 
   expect_identical(
-    functions$derive_react1_estbinres(fixture),
+    react_derive_estbinres(fixture),
     c(1L, 1L, NA_integer_, 1L, 1L, 0L, NA_integer_,
       1L, NA_integer_, 1L, 1L, 0L,
       0L, NA_integer_, NA_integer_, 1L, NA_integer_)
   )
 })
 
-test_that("documented simple derived-variable recipes run on mixed rounds", {
-  functions <- load_derived_guide_functions()
+test_that("simple derived-variable functions run on mixed rounds", {
   fixture <- data.frame(
     survey_id = c("REACT1_R01", "REACT1_R14", "REACT1_R19", "REACT2_S5_R01"),
     IMD_DECILE = c(1, 10, -92, 3),
@@ -109,27 +93,70 @@ test_that("documented simple derived-variable recipes run on mixed rounds", {
   )
 
   expect_identical(
-    functions$derive_react1_imd_quintile(fixture),
+    react_derive_imd_quintile(fixture),
     c(1L, 5L, NA_integer_, NA_integer_)
   )
   expect_identical(
-    as.character(functions$derive_react1_age_group(fixture)),
+    as.character(react_derive_age_group(fixture)),
     c("5-12", "65+", "65+", NA_character_)
   )
   expect_warning(
-    household <- functions$derive_react1_household_size(fixture),
+    household <- react_derive_household_size(fixture),
     "both routed household-count alternatives",
     fixed = TRUE
   )
   expect_identical(household, c(3L, 6L, 2L, NA_integer_))
 
-  bmi <- functions$derive_react1_bmi(fixture)
+  bmi <- react_derive_bmi(fixture)
   expect_true(is.na(bmi[[1L]]))
   expect_equal(bmi[[2L]], 22.86)
   expect_equal(bmi[[3L]], 22.14)
   expect_true(is.na(bmi[[4L]]))
   expect_identical(
-    as.character(functions$derive_adult_bmi_category(bmi, fixture$U_AGE)),
+    as.character(react_bmi_category(bmi, fixture$U_AGE)),
     c(NA_character_, "Normal weight", "Normal weight", NA_character_)
   )
+})
+
+test_that("IgG positivity follows the reviewed NEWRESULT coding", {
+  fixture <- data.frame(
+    survey_id = c(rep("REACT2_S5_R05", 8), "REACT1_R08"),
+    NEWRESULT = c(0, 1, 2, 3, 4, 7, -77, NA, 2)
+  )
+  expect_identical(
+    react_derive_igg(fixture),
+    c(0L, 0L, 1L, 1L, NA, NA, NA, NA, NA)
+  )
+  expect_identical(react_derive_igg(fixture[9, , drop = FALSE]), NA_integer_)
+  expect_error(
+    react_derive_igg(data.frame(survey_id = "REACT2_S5_R01")),
+    "needs raw column NEWRESULT"
+  )
+})
+
+test_that("derived-variable functions accept an extraction result", {
+  result <- react_extract(
+    react_synthetic(n_per_round = c(REACT1_R17 = 300L, REACT2_S5_R05 = 300L), seed = 11L),
+    families = c(
+      "infection-measurement/laboratory", "infection-measurement/testing",
+      "people-households/demographics"
+    ),
+    rounds = c("REACT1_R17", "REACT2_S5_R05"),
+    progress = FALSE
+  )
+  react1 <- result$raw_data$survey_id == "REACT1_R17"
+
+  estbinres <- react_derive_estbinres(result)
+  expect_identical(estbinres, react_derive_estbinres(result$raw_data))
+  expect_length(estbinres, nrow(result$data))
+  expect_true(all(is.na(estbinres[!react1])))
+  expect_true(all(estbinres[react1] %in% c(0L, 1L, NA)))
+  expect_true(any(estbinres[react1] %in% 0L))
+
+  igg <- react_derive_igg(result)
+  expect_true(all(is.na(igg[react1])))
+  expect_true(any(igg[!react1] %in% 1L))
+
+  expect_false(anyNA(react_derive_age_group(result)[react1]))
+  expect_error(react_derive_estbinres(list(a = 1)), "raw_data")
 })

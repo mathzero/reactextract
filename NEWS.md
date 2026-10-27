@@ -1,5 +1,16 @@
 # reactextract 0.6.0.9006 (development)
 
+- Adds `react_search()`, a keyword search over concept names, raw field names
+  and question wording. It returns the concept IDs to pass to `react_extract()`,
+  with each concept's raw fields, rounds and typical question.
+- Exports the derived-variable recipes as functions: `react_derive_estbinres()`,
+  `react_derive_age_group()`, `react_derive_imd_quintile()`,
+  `react_derive_household_size()`, `react_derive_bmi()` and
+  `react_bmi_category()`. Adds `react_derive_igg()` for REACT-2 IgG positivity,
+  following the reviewed `NEWRESULT` outcome definition. Each accepts
+  `result$raw_data` or the whole extraction result.
+- Adds `react_short_names()`, which drops topic prefixes from cleaned column
+  names (for example `people_households.demographics.gender` becomes `gender`).
 - `react_synthetic_profile()` and `react_synthetic()` now default to the
   approved `v5` profile. The `v6` participation preview is opt-in via
   `version = "v6"`, shows a one-time notice and is labelled experimental: it
