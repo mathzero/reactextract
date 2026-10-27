@@ -509,7 +509,8 @@
 #'   [react_synthetic()].
 #' @param families `all` or dictionary family selectors returned by
 #'   [react_families()].
-#' @param rounds `all`, round IDs, or survey IDs.
+#' @param rounds `all`, round IDs, or survey IDs. For a synthetic source, `all`
+#'   means every round that has records in `n_per_round`.
 #' @param concepts Optional exact concept IDs used as an additional filter.
 #' @param progress Show round and processing-stage progress. Updates include
 #'   requested fields, records received, and elapsed time. Defaults to on in
@@ -545,6 +546,9 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
   stage_started <- .extract_clock()
   .progress_stage_start(progress, "loading dictionary and selecting fields")
   dictionary <- react_dictionary()
+  if (inherits(source, "react_synthetic_source")) {
+    rounds <- .synthetic_extract_rounds(source, rounds, dictionary$rounds)
+  }
   selected <- .select_occurrences(dictionary, families, rounds, concepts)
   requested_rounds <- .resolve_rounds(rounds, dictionary$rounds)
   selected_output_plan <- dictionary$concept_output_columns[

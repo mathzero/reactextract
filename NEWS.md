@@ -11,6 +11,9 @@
   `result$raw_data` or the whole extraction result.
 - Adds `react_short_names()`, which drops topic prefixes from cleaned column
   names (for example `people_households.demographics.gender` becomes `gender`).
+- `react_extract()` on a synthetic source created for only some rounds now
+  returns those rounds by default, instead of failing with "subscript out of
+  bounds". Explicitly requesting a round without records gives a clear error.
 - `react_synthetic_profile()` and `react_synthetic()` now default to the
   approved `v5` profile. The `v6` participation preview is opt-in via
   `version = "v6"`, shows a one-time notice and is labelled experimental: it

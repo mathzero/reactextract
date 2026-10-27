@@ -20,7 +20,8 @@ react_extract(
 \item{families}{\code{all} or dictionary family selectors returned by
 \code{\link[=react_families]{react_families()}}.}
 
-\item{rounds}{\code{all}, round IDs, or survey IDs.}
+\item{rounds}{\code{all}, round IDs, or survey IDs. For a synthetic source, \code{all}
+means every round that has records in \code{n_per_round}.}
 
 \item{concepts}{Optional exact concept IDs used as an additional filter.}
 

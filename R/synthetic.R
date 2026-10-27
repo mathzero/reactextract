@@ -309,6 +309,26 @@ react_synthetic_profile <- function(development = FALSE, refresh = FALSE,
   .development_synthetic_profile()
 }
 
+# A synthetic source only has records for the rounds named in `n_per_round`.
+.synthetic_extract_rounds <- function(source, rounds, registry) {
+  available <- names(source$n_per_round)
+  if (length(rounds) == 1L && identical(rounds, "all")) {
+    return(registry$round_id[registry$round_id %in% available])
+  }
+  requested <- .resolve_rounds(rounds, registry)
+  missing <- setdiff(requested, available)
+  if (length(missing) > 0L) {
+    stop(
+      "The synthetic source has no records for ",
+      paste(registry$survey_id[match(missing, registry$round_id)], collapse = ", "),
+      ". Add ", if (length(missing) > 1L) "them" else "it",
+      " to `n_per_round` in react_synthetic().",
+      call. = FALSE
+    )
+  }
+  rounds
+}
+
 .normalise_synthetic_counts <- function(n_per_round, rounds) {
   if (length(n_per_round) == 1L && is.null(names(n_per_round))) {
     value <- as.integer(n_per_round)
