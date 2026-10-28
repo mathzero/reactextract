@@ -13,7 +13,7 @@ structure for each:
 
 | Source | Created by | Where it is used |
 |---|---|---|
-| Synthetic data | `react_synthetic()` | Anywhere: laptops, the HPC, teaching |
+| Synthetic data | `react_synthetic()` | Anywhere |
 | Real data from the REACT database | `react_oracle(con)` | Inside the secure enclave only |
 | Round files (RDS, CSV or Parquet) | `react_files(path)` | Approved environments, for validation |
 

@@ -2,14 +2,32 @@
 
 [![R package validation](https://github.com/mathzero/reactextract/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/mathzero/reactextract/actions/workflows/R-CMD-check.yaml)
 
-`reactextract` creates **synthetic REACT data**: fictional participants whose
-records look and behave like the real REACT-1 and REACT-2 study data. They have
-the same variables, codes, questionnaire routing and cleaning.
+`reactextract` gives one R interface to the REACT-1 and REACT-2 study data, with
+two interchangeable sources:
 
-Use synthetic data to learn how REACT data are organised and to build and test
-an analysis pipeline on your own computer or the HPC. If you later work with the
-real data in the secure environment, the same code runs on it after changing a
-single line.
+- **Synthetic data**, which anyone can generate on their own computer:
+  fictional participants whose records have the same variables, codes,
+  questionnaire routing and cleaning as the real data.
+- **Real data**, which approved researchers extract inside the secure REACT data
+  environment.
+
+The idea is to write and test an analysis on synthetic data, then run exactly
+the same code on the real data. Only the data source changes:
+
+```r
+# Anywhere: develop and test with synthetic data
+source <- react_synthetic(n_per_round = 1000L, seed = 1L)
+
+# Inside the secure environment: run the same analysis on the real data
+source <- react_oracle(con)
+
+result <- react_extract(source, families = "health/acute-symptoms")
+```
+
+It is designed for anyone new to REACT, including students learning to work
+with the data and researchers preparing a data access request. You can explore
+the variables and build a complete analysis pipeline before you have access to
+the real data.
 
 > **Synthetic data are for learning and writing code, not for findings.** They
 > are generated from protected summary tables, not from anyone's records. Do not
@@ -70,9 +88,6 @@ install.packages("remotes")
 remotes::install_github("mathzero/reactextract")
 ```
 
-On the HPC, install from a session that has internet access, such as an
-interactive RStudio session or a login node.
-
 Check that it worked:
 
 ```r
@@ -81,7 +96,7 @@ packageVersion("reactextract")
 react_dictionary_version()
 ```
 
-## Quick start
+## Quick start with synthetic data
 
 This creates 2,000 fictional people in each of two REACT-1 rounds, January 2021
 and January 2022, extracts their demographics and PCR results, and makes a
@@ -305,6 +320,43 @@ dat <- readRDS("react_synthetic_analysis.rds")
 To keep the whole result, including the raw data and supporting tables, use
 `react_write(result, "react_result.rds")`.
 
+## Moving your analysis to the real data
+
+Synthetic and real extractions return exactly the same tables, columns and
+coding, so code written against `result$data` or `result$raw_data` runs
+unchanged on the real data. The simplest way to keep the switch to one line is
+to put the extraction in a function that takes the source:
+
+```r
+get_analysis_data <- function(source) {
+  result <- react_extract(
+    source,
+    families = c("people-households/demographics", "infection-measurement/laboratory"),
+    rounds = c("REACT1_R08", "REACT1_R17")
+  )
+  dat <- react_short_names(result)
+  dat$pcr_positive <- react_derive_estbinres(result)
+  dat
+}
+
+# While developing
+dat <- get_analysis_data(react_synthetic(
+  n_per_round = c(REACT1_R08 = 2000L, REACT1_R17 = 2000L),
+  seed = 2026L
+))
+
+# Inside the secure environment, with a database connection `con`
+dat <- get_analysis_data(react_oracle(con))
+```
+
+The real data can only be used inside the secure REACT data environment, and
+extracted records must never leave it. Access is by application: see
+[REACT data access requests](https://www.imperial.ac.uk/medicine/research-and-impact/groups/react-study/data-access-requests/).
+Connecting to the database, extracting from round files, output options and the
+cleaning rules are described in the [advanced guide](inst/ADVANCED_GUIDE.md),
+and installation inside the secure environment in the
+[enclave installation guide](inst/ENCLAVE_INSTALL.md).
+
 ## What the synthetic data capture
 
 Synthetic records are generated round by round from the approved
@@ -352,15 +404,6 @@ to the nearest 5, and the tables passed formal disclosure review.
   or `?react_derive_estbinres`.
 - Report problems or suggestions on
   [GitHub Issues](https://github.com/mathzero/reactextract/issues).
-
-## Using the real data
-
-Inside the secure environment, the same `react_extract()` call reads the real
-REACT database: only the source changes, from `react_synthetic()` to
-`react_oracle()`. Real-data extraction, round files, output options and the
-cleaning rules are described in the [advanced guide](inst/ADVANCED_GUIDE.md).
-Installation inside the enclave is described in the
-[enclave installation guide](inst/ENCLAVE_INSTALL.md).
 
 ## Licences
 
