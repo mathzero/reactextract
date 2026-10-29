@@ -16,3 +16,9 @@ dist/
 !inst/extdata/response-options.tar.gz
 !inst/extdata/synthetic-rules.tar.gz
 *.Rcheck/
+
+# Claude Code
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+.mcp.json
