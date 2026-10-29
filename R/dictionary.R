@@ -43,7 +43,9 @@
     strip.white = FALSE,
     check.names = FALSE,
     stringsAsFactors = FALSE,
-    fileEncoding = "UTF-8"
+    # Declare, rather than convert, the encoding: conversion to a C/ASCII
+    # session locale (common in batch jobs) silently truncates the file.
+    encoding = "UTF-8"
   )
 }
 
@@ -298,5 +300,5 @@ react_concept_coding <- function(concepts) {
 react_families <- function() {
   taxonomy <- react_dictionary()$taxonomy
   taxonomy$family <- vapply(taxonomy$taxonomy_id, .family_key, character(1))
-  taxonomy[c("family", names(taxonomy))]
+  taxonomy[c("family", setdiff(names(taxonomy), "family"))]
 }

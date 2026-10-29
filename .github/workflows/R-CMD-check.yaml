@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        r-version: ["4.4.1", "4.5.1", "release"]
+        r-version: ["4.1.3", "4.4.1", "4.5.1", "release"]
     env:
       _R_CHECK_FORCE_SUGGESTS_: "false"
     steps:

@@ -1,8 +1,11 @@
 # Relationships represented in synthetic REACT data
 
-Applies to the default **reactextract 0.6.0.9005 development preview**, covering
-REACT-1 rounds 1–19 and REACT-2 rounds 1–6. The explicitly selected `v5` profile
-retains its earlier generator.
+Applies to the **experimental `v6` profile**
+(`react_synthetic_profile(version = "v6")`), covering REACT-1 rounds 1–19 and
+REACT-2 rounds 1–6. Since 0.6.0.9006 the default is the approved `v5` profile,
+whose outcome-centred relationships for PCR and IgG positivity are described in
+the README. Some `v6` categorical distributions are currently implausible, so use
+it only to test code against the preview.
 
 The publications below motivate the choice of relationships. The generator does
 **not** copy published odds ratios or reproduce the papers' analyses. It uses

@@ -21,6 +21,7 @@ copied <- c(
   file.copy(tarball, output, overwrite = TRUE),
   file.copy("renv.lock", output, overwrite = TRUE),
   file.copy("inst/ENCLAVE_INSTALL.md", output, overwrite = TRUE),
+  file.copy("inst/ADVANCED_GUIDE.md", output, overwrite = TRUE),
   file.copy("inst/DERIVED_VARIABLES.md", output, overwrite = TRUE),
   file.copy("inst/PARTICIPATION_V6_DECISIONS.md", output, overwrite = TRUE),
   file.copy("inst/extdata/dependency-models-v1.rds", output, overwrite = TRUE),

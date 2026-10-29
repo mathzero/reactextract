@@ -1,12 +1,12 @@
 test_that("v6 pins models and v5 remains separate", {
-  p<-react_synthetic_profile();expect_identical(p$dependency_models,.read_dependency_models())
+  p<-v6_profile();expect_identical(p$dependency_models,.read_dependency_models())
   expect_null(react_synthetic_profile(version="v5")$dependency_models)
   bad<-p;bad$dependency_models$rounds[[1]]$model$coefficients[1]<-0
   expect_error(react_synthetic(bad),"missing or changed")
 })
 
 test_that("all round encoders preserve routing and coherent outcomes", {
-  d<-react_dictionary();s<-react_synthetic(n_per_round=24L,seed=906L)
+  d<-react_dictionary();s<-react_synthetic(v6_profile(), n_per_round=24L,seed=906L)
   for(round in d$rounds$round_id) {
     o<-d$occurrences[d$occurrences$round_id==round,,drop=FALSE]
     reg<-d$source_registry[d$source_registry$round_id==round,,drop=FALSE]
@@ -35,7 +35,7 @@ test_that("all round encoders preserve routing and coherent outcomes", {
 })
 
 test_that("model integration is deterministic and retains wide output contract", {
-  s<-react_synthetic(n_per_round=c(REACT1_R17=80L,REACT2_S5_R06=80L),seed=191L)
+  s<-react_synthetic(v6_profile(), n_per_round=c(REACT1_R17=80L,REACT2_S5_R06=80L),seed=191L)
   a<-react_extract(s,rounds=names(s$n_per_round),output="wide",progress=FALSE)
   b<-react_extract(s,rounds=names(s$n_per_round),concepts="health.preexisting.overweight",output="both",progress=FALSE)
   keys<-b$observations$observation_id
@@ -49,7 +49,7 @@ test_that("model integration is deterministic and retains wide output contract",
 })
 
 test_that("outcome encoders follow model probabilities rather than old v5 draws", {
-  d<-react_dictionary();s<-react_synthetic(n_per_round=32L,seed=196L)
+  d<-react_dictionary();s<-react_synthetic(v6_profile(), n_per_round=32L,seed=196L)
   for(r in c("react1.r01","react1.r17","react2.r06")) {
     o<-d$occurrences[d$occurrences$round_id==r,,drop=FALSE]
     reg<-d$source_registry[d$source_registry$round_id==r,,drop=FALSE]

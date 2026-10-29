@@ -1,5 +1,5 @@
 test_that("small shared participation is an assumption, not a replacement count", {
-  s <- react_synthetic(n_per_round=10L)
+  s <- react_synthetic(v6_profile(), n_per_round=10L)
   before <- s$profile$participation
   total <- s$profile$round_denominators
   for (round in paste0("react2.r0",1:6)) {
@@ -23,7 +23,7 @@ test_that("small shared participation is an assumption, not a replacement count"
 })
 
 test_that("other suppression reasons and unavailable denominators cannot use five", {
-  s <- react_synthetic(n_per_round=1L); round <- "react2.r01"
+  s <- react_synthetic(v6_profile(), n_per_round=1L); round <- "react2.r01"
   cc <- s$profile$participation$counts
   idx <- which(cc$field=="individual_participation" & cc$round_id==round & cc$state=="shared_nonresponse")
   for (reason in c("linked_complement","withheld_remainder","unknown",NA_character_)) {
@@ -59,7 +59,7 @@ test_that("other suppression reasons and unavailable denominators cannot use fiv
 })
 
 test_that("small-rate draws use the seed and the documented probability", {
-  s <- react_synthetic(n_per_round=1L,seed=904L); d <- react_dictionary()
+  s <- react_synthetic(v6_profile(), n_per_round=1L,seed=904L); d <- react_dictionary()
   a <- .participation_context(s,"react2.r01",200000L,d)
   expect_identical(a,.participation_context(s,"react2.r01",200000L,d))
   expected <- 200000*a$rate$probability
@@ -70,7 +70,7 @@ test_that("small-rate draws use the seed and the documented probability", {
 })
 
 test_that("assumed shared nonresponse is row-aligned in REACT-2 and selection-stable", {
-  s <- react_synthetic(n_per_round=40L,seed=906L); d <- react_dictionary(); round <- "react2.r01"
+  s <- react_synthetic(v6_profile(), n_per_round=40L,seed=906L); d <- react_dictionary(); round <- "react2.r01"
   # Fictional tiny denominator forces events so the final overwrite is tested.
   # No protected count or real denominator is altered in the shipped profile.
   s$profile$round_denominators$count[s$profile$round_denominators$round_id==round] <- 20

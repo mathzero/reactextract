@@ -649,3 +649,31 @@ test_that("targeted repair replaces only requested occurrence aggregates", {
   expect_identical(unname(metadata[["profile_scope"]]), "complete_with_targeted_repair")
   expect_identical(unname(metadata[["disclosure_approval"]]), "not_approved")
 })
+
+test_that("synthetic extraction defaults to the rounds that have records", {
+  source <- react_synthetic(
+    n_per_round = c(REACT1_R08 = 5L, REACT2_S5_R05 = 5L),
+    seed = 31L
+  )
+  result <- react_extract(
+    source,
+    concepts = "people_households.demographics.gender",
+    progress = FALSE
+  )
+  expect_setequal(unique(result$data$survey_id), c("REACT1_R08", "REACT2_S5_R05"))
+  expect_equal(nrow(result$data), 10L)
+
+  narrow <- react_extract(
+    source,
+    concepts = "people_households.demographics.gender",
+    rounds = "REACT1_R08",
+    progress = FALSE
+  )
+  expect_identical(unique(narrow$data$survey_id), "REACT1_R08")
+
+  expect_error(
+    react_extract(source, rounds = c("REACT1_R08", "REACT1_R10"), progress = FALSE),
+    "no records for REACT1_R10. Add it to `n_per_round`",
+    fixed = TRUE
+  )
+})

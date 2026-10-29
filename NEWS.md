@@ -1,3 +1,55 @@
+# reactextract 0.6.0.9006 (development)
+
+- Lowers the minimum R version from 4.4.0 to 4.1.0, so the package installs on
+  older R installations such as university HPC environments. No code needed
+  R 4.4; the earlier floor dated from the original pin to R 4.4.x. CI now also
+  checks R 4.1.3.
+- Adds `react_search()`, a keyword search over concept names, raw field names
+  and question wording. It returns the concept IDs to pass to `react_extract()`,
+  with each concept's raw fields, rounds and typical question.
+- Exports the derived-variable recipes as functions: `react_derive_estbinres()`,
+  `react_derive_age_group()`, `react_derive_imd_quintile()`,
+  `react_derive_household_size()`, `react_derive_bmi()` and
+  `react_bmi_category()`. Adds `react_derive_igg()` for REACT-2 IgG positivity,
+  following the reviewed `NEWRESULT` outcome definition. Each accepts
+  `result$raw_data` or the whole extraction result.
+- Adds `react_short_names()`, which drops topic prefixes from cleaned column
+  names (for example `people_households.demographics.gender` becomes `gender`).
+- `react_extract()` on a synthetic source created for only some rounds now
+  returns those rounds by default, instead of failing with "subscript out of
+  bounds". Explicitly requesting a round without records gives a clear error.
+- Rewrites the README for students and researchers new to REACT: the
+  synthetic-then-real workflow, the REACT studies, installation, a quick start,
+  choosing variables, reading the result, derived variables, moving an analysis
+  to the real data and what synthetic data do and do not capture. Real-data extraction,
+  file sources, output options and harmonisation move to
+  `inst/ADVANCED_GUIDE.md`, which is also added to the offline bundle.
+- `react_synthetic_profile()` and `react_synthetic()` now default to the
+  approved `v5` profile. The `v6` participation preview is opt-in via
+  `version = "v6"`, shows a one-time notice and is labelled experimental: it
+  produces implausible distributions for several key variables (for example
+  ethnicity, deprivation quintile, smoking, country of birth and gender).
+- Fixes silent truncation of the bundled dictionary and synthetic-rule tables in
+  a C/ASCII locale, which is common in batch jobs. Previously only a handful of
+  rows were read, with a warning but no error.
+- Printing a `v5` extraction result no longer fails; the summary names the
+  synthetic model in use.
+- `react_families()` no longer returns a duplicated `family` column.
+- Fixes integer bins that hold a single value (for example each IMD decile),
+  which drew from 1 to that value instead of returning it. Generated IMD deciles
+  now follow the approved counts instead of falling from about 24% (decile 1) to
+  about 1% (decile 10).
+- An outcome-conditional table with a suppressed predictor category no longer
+  erases that category. When the approved marginal implies the hidden category
+  is far larger than primary suppression allows (complementary suppression),
+  those rows keep their marginal draw. This restores, for example, the most
+  deprived IMD quintile and the North East region, which were almost absent.
+  No suppressed count is estimated. The approved REACT-1 age marginals withhold
+  ages 85 and over, so those ages remain almost absent from REACT-1 rounds.
+- Adds plausibility tests for key synthetic distributions (gender, ethnicity,
+  country of birth, smoking, deprivation, PCR and IgG positivity), so that a
+  profile with permuted or collapsed categories fails the test suite.
+
 # reactextract 0.6.0.9005 (development preview)
 
 - Integrates checksum-pinned, user-approved models for all 25 rounds. Conditional

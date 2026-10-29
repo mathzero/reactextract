@@ -264,26 +264,27 @@
 #' with the package. Set `development = TRUE` only to use the public-domain
 #' fallback that contains no enclave-derived distributions. No profile is
 #' downloaded at runtime.
-#' The v6 default in this development build is a participation preview, not the
-#' final 0.6.0 model. Its aggregate inputs, 197 context rules and 109 vaccination, work/travel/contact
-#' option restrictions are approved. Round-specific outcome models and protected
-#' conditional context/symptom/Ct tables are applied with explicit fallbacks.
-#' Held cases, other option restrictions and general correlations remain incomplete.
-#' A shared nonresponse count
-#' explicitly marked below ten uses an assumed count of five over the approved
-#' rounded round total; this is labelled in issues/manifest, not filled into the
-#' protected profile. Other suppression types do not imply a small count.
+#'
+#' The default `"v5"` profile reproduces each round's approved distributions,
+#' questionnaire routing and the reviewed outcome-centred relationships for
+#' REACT-1 PCR and REACT-2 IgG positivity.
+#'
+#' `"v6"` is an experimental participation preview. It adds approved
+#' participation, eligibility and round-specific dependency models, but some
+#' categorical distributions it generates (for example ethnicity, deprivation
+#' quintile, smoking and gender) are currently implausible. Use it only to test
+#' code against the preview, never as the default for analysis practice.
 #'
 #' @param development Use the public-domain development fallback instead of the
 #'   approved aggregate profile.
 #' @param refresh Re-read and re-verify the approved bundled profile.
-#' @param version `"v6"` selects the participation preview using approved
-#'   aggregates. `"v5"` preserves the previous generation model. The public
-#'   development fallback is unchanged by this argument.
+#' @param version `"v5"` (default) uses the approved generation model. `"v6"`
+#'   selects the experimental participation preview. The public development
+#'   fallback is unchanged by this argument.
 #' @return A schema-2 synthetic profile.
 #' @export
 react_synthetic_profile <- function(development = FALSE, refresh = FALSE,
-                                    version = c("v6", "v5")) {
+                                    version = c("v5", "v6")) {
   version <- match.arg(version)
   if (!is.logical(development) || length(development) != 1L || is.na(development)) {
     stop("`development` must be one TRUE or FALSE value.", call. = FALSE)
@@ -293,10 +294,39 @@ react_synthetic_profile <- function(development = FALSE, refresh = FALSE,
   }
   if (!development) {
     profile <- .approved_synthetic_profile(refresh = refresh)
-    if(version == "v6") profile <- .participation_overlay(profile, refresh)
+    if(version == "v6") {
+      if (is.null(.reactextract_env$v6_notice_shown)) {
+        message(
+          "The v6 synthetic profile is an experimental preview: some generated ",
+          "distributions are implausible. Use the default v5 profile for analysis practice."
+        )
+        .reactextract_env$v6_notice_shown <- TRUE
+      }
+      profile <- .participation_overlay(profile, refresh)
+    }
     return(profile)
   }
   .development_synthetic_profile()
+}
+
+# A synthetic source only has records for the rounds named in `n_per_round`.
+.synthetic_extract_rounds <- function(source, rounds, registry) {
+  available <- names(source$n_per_round)
+  if (length(rounds) == 1L && identical(rounds, "all")) {
+    return(registry$round_id[registry$round_id %in% available])
+  }
+  requested <- .resolve_rounds(rounds, registry)
+  missing <- setdiff(requested, available)
+  if (length(missing) > 0L) {
+    stop(
+      "The synthetic source has no records for ",
+      paste(registry$survey_id[match(missing, registry$round_id)], collapse = ", "),
+      ". Add ", if (length(missing) > 1L) "them" else "it",
+      " to `n_per_round` in react_synthetic().",
+      call. = FALSE
+    )
+  }
+  rounds
 }
 
 .normalise_synthetic_counts <- function(n_per_round, rounds) {
@@ -547,10 +577,12 @@ react_synthetic <- function(profile = react_synthetic_profile(),
       if (integer_lower > integer_upper) {
         stop("A safe integer/date bin contains no permitted value.", call. = FALSE)
       }
-      value[positions] <- sample(
-        seq.int(integer_lower, integer_upper),
-        length(positions), replace = TRUE
-      )
+      # Index the permitted values: sample(k) on a one-value bin would draw
+      # from 1:k instead of returning k.
+      permitted <- seq.int(integer_lower, integer_upper)
+      value[positions] <- permitted[sample.int(
+        length(permitted), length(positions), replace = TRUE
+      )]
     }
   }
   if (is_date) as.Date(value, origin = "1970-01-01") else value

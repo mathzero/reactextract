@@ -1,438 +1,412 @@
 # reactextract
 
-`reactextract` supports two ways of working with REACT data:
+[![R package validation](https://github.com/mathzero/reactextract/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/mathzero/reactextract/actions/workflows/R-CMD-check.yaml)
 
-1. extract real REACT-1 and REACT-2 data inside the secure enclave; and
-2. generate synthetic data outside the enclave so analysis code can be written
-   and tested before it is transferred inside.
+`reactextract` gives one R interface to the REACT-1 and REACT-2 study data, with
+two interchangeable sources:
 
-Both routes use the same `react_extract()` function, the same
-[`react_wiki`](https://github.com/mathzero/react_wiki) dictionary, and the same
-output tables. In most cases, moving an analysis into the enclave means changing
-only the source of the data.
+- **Synthetic data**, which anyone can generate on their own computer:
+  fictional participants whose records have the same variables, codes,
+  questionnaire routing and cleaning as the real data.
+- **Real data**, which approved researchers extract inside the secure REACT data
+  environment.
 
-The package covers REACT-1 rounds 1–19 and REACT-2 rounds 1–6.
-
-See [Relationships represented in synthetic REACT data](inst/SYNTHETIC_RELATIONSHIPS.md)
-for the captured dependencies, round coverage, limitations and links to published
-REACT research.
-
-## Participation preview
-
-Version **0.6.0.9005 is a development preview**, not the finished 0.6.0 release.
-Its default synthetic data use the new participation summaries:
-
-- shared `-77` values are aligned within the governed REACT-1 questionnaire
-  fields, while independent linked information and laboratory results remain;
-- NHS-derived `U_AGE` controls adult-only REACT-1 smoking/vaping eligibility;
-- 197 reviewed age/parent-carer/questionnaire conditions govern 772 field–round
-  combinations, including workplace contacts and vaccination follow-ups;
-- 109 reviewed vaccination, work, travel and contact options have additional age, gender or self-response
-  restrictions; unavailable options stay missing without erasing other answers;
-- `AGE` remains a separate questionnaire answer, not a copy of `U_AGE`;
-- REACT-2's shared nonresponse count is explicitly below ten in each round.
-  The preview assumes five cases in the original round population and divides
-  by its approved rounded total. This is labelled **assumed**, not measured;
-  it is not a quota of five records in your synthetic sample.
-
-Some distributions remain partly hidden. Valid public answer categories provide
-a small fallback. The shared-state approximation above is limited to an explicit
-`below_10` label; complementary suppression never implies a small count. Other
-hidden missingness counts remain unestimated. The denominator assumes the
-historical round population was unchanged between profiling runs. Questionnaire
-age is left missing when its conditional distribution is unavailable. The result's
-`issues` and `manifest` describe these limitations.
-
-The default now includes approved round-specific PCR/antibody models, conditional
-context and symptom tables, and outcome-conditioned Ct bins with zero separate.
-REACT-2 test attempts/completion are generated jointly with result states, then
-questionnaire rules are reapplied. Ct draws inconsistent with the reviewed PCR
-definition use an outcome-consistent fallback. Entirely suppressed conditional
-distributions retain the baseline draw; their counts are never reconstructed.
-
-Age and shared participation remain anchored to their separately approved
-context model, not resampled from the new tables. Nine held question rules,
-seven held vaccination options, three held quarantine options and other
-restrictions remain unfinished. Product/time-since-vaccination effects and
-general joint symptom patterns are not modelled. Low-prevalence relationships
-can be imprecise, and some supported-group mismatches remain documented.
-This preview is for testing code, not for scientific conclusions.
-
-The usual call is unchanged:
+The idea is to write and test an analysis on synthetic data, then run exactly
+the same code on the real data. Only the data source changes:
 
 ```r
-fake <- react_extract(react_synthetic(n_per_round = 1000L, seed = 1L))
-fake$data     # harmonised rows × columns
-fake$raw_data # raw rows × columns
+# Anywhere: develop and test with synthetic data
+source <- react_synthetic(n_per_round = 1000L, seed = 1L)
+
+# Inside the secure environment: run the same analysis on the real data
+source <- react_oracle(con)
+
+result <- react_extract(source, families = "health/acute-symptoms")
 ```
 
-For reproducibility, the old model remains available through
-`react_synthetic(profile = react_synthetic_profile(version = "v5"))`.
-The new mode generates a fixed set of all fields within each requested round
-internally, even for a narrow request, to keep routing/context and overlapping
-values consistent. Only requested fields are returned; wide mode still processes
-one round at a time and does not retain the combined long tables. Fallback and
-guard counts are recorded in `issues` and `manifest`.
+It is designed for anyone new to REACT, including students learning to work
+with the data and researchers preparing a data access request. You can explore
+the variables and build a complete analysis pipeline before you have access to
+the real data.
 
-Rules are stored once as 20 reusable condition patterns with exact field/round
-links, in a single small bundle shared with the wiki. Adding a reviewed rule
-normally changes these tables, not the R code. Detailed questionnaire evidence
-stays in the wiki. No extra dependencies are required.
+> **Synthetic data are for learning and writing code, not for findings.** They
+> are generated from protected summary tables, not from anyone's records. Do not
+> use them to estimate prevalence, test hypotheses, calculate power or draw any
+> scientific conclusion. See [What the synthetic data capture](#what-the-synthetic-data-capture).
 
-Use the usual workflow for the preview:
+## The REACT studies
+
+REACT (REal-time Assessment of Community Transmission) was a programme of large
+surveys of random samples of the population of England during the COVID-19
+pandemic, run by Imperial College London with Ipsos.
+
+| Study | Dates | Rounds | What participants did |
+|---|---|---|---|
+| **REACT-1** | May 2020 – March 2022 | 19 | People aged 5 and over took a throat and nose swab for a PCR test and completed a questionnaire |
+| **REACT-2** | June 2020 – May 2021 | 6 | Adults took a finger-prick antibody (IgG) lateral flow test at home and completed a questionnaire |
+
+Each round recruited a new random sample, with roughly 95,000–210,000
+participants tested per round. The questionnaires changed from round to round as
+the pandemic, testing and vaccination changed.
+
+The [REACT data wiki](https://mathzero.github.io/react_wiki/) describes every
+variable, question, response option and round. Use it alongside this package.
+
+<details>
+<summary>Round dates and identifiers</summary>
+
+Rounds are identified by survey IDs such as `REACT1_R08` and `REACT2_S5_R05`.
+
+| Survey ID | Fieldwork | Survey ID | Fieldwork |
+|---|---|---|---|
+| `REACT1_R01` | 1 May – 1 Jun 2020 | `REACT1_R11` | 15 Apr – 3 May 2021 |
+| `REACT1_R02` | 19 Jun – 7 Jul 2020 | `REACT1_R12` | 20 May – 7 Jun 2021 |
+| `REACT1_R03` | 24 Jul – 11 Aug 2020 | `REACT1_R13` | 24 Jun – 12 Jul 2021 |
+| `REACT1_R04` | 20 Aug – 8 Sep 2020 | `REACT1_R14` | 9 – 27 Sep 2021 |
+| `REACT1_R05` | 18 Sep – 5 Oct 2020 | `REACT1_R15` | 19 Oct – 5 Nov 2021 |
+| `REACT1_R06` | 16 Oct – 2 Nov 2020 | `REACT1_R16` | 23 Nov – 14 Dec 2021 |
+| `REACT1_R07` | 13 Nov – 3 Dec 2020 | `REACT1_R17` | 5 – 20 Jan 2022 |
+| `REACT1_R08` | 6 – 22 Jan 2021 | `REACT1_R18` | 8 Feb – 1 Mar 2022 |
+| `REACT1_R09` | 4 – 23 Feb 2021 | `REACT1_R19` | 8 – 31 Mar 2022 |
+| `REACT1_R10` | 11 – 30 Mar 2021 | | |
+| `REACT2_S5_R01` | 20 Jun – 10 Jul 2020 | `REACT2_S5_R04` | 27 Oct – 10 Nov 2020 |
+| `REACT2_S5_R02` | 30 Jul – 12 Aug 2020 | `REACT2_S5_R05` | 25 Jan – 8 Feb 2021 |
+| `REACT2_S5_R03` | 15 – 28 Sep 2020 | `REACT2_S5_R06` | 12 – 25 May 2021 |
+
+The wiki's [fieldwork page](https://mathzero.github.io/react_wiki/fieldwork.html)
+also gives the number of tests in each round.
+
+</details>
+
+## Installation
+
+You need R 4.1.0 or later. The package uses only base R, so it installs no other
+packages. Install it from GitHub:
 
 ```r
-fake_result <- react_extract(react_synthetic(n_per_round = 1000L, seed = 1L))
-fake_result$data
-fake_result$raw_data
+install.packages("remotes")
+remotes::install_github("mathzero/reactextract")
 ```
 
-To reproduce the previous model explicitly:
+Check that it worked:
 
 ```r
-v5_result <- react_extract(react_synthetic(
-  profile = react_synthetic_profile(version = "v5"),
-  n_per_round = 1000L, seed = 1L
-))
-```
-
-Real-data extraction is unchanged. Full working decisions are in
-[`inst/PARTICIPATION_V6_DECISIONS.md`](inst/PARTICIPATION_V6_DECISIONS.md).
-
-## Install
-
-Inside the enclave, install the supplied offline source package:
-
-```r
-install.packages("reactextract_0.6.0.9005.tar.gz", repos = NULL, type = "source")
 library(reactextract)
+packageVersion("reactextract")
+react_dictionary_version()
 ```
 
-`reactextract` requires R 4.4.0 or later, with no artificial upper-version
-limit. Continuous integration checks R 4.4.1, R 4.5.1 and the current R
-release (currently R 4.6.x).
-The R version recorded in `renv.lock` identifies the environment used to lock
-the build and test dependencies; it is not a maximum supported R version.
+## Quick start with synthetic data
 
-Outside the enclave, install direct from github:
+This creates 2,000 fictional people in each of two REACT-1 rounds, January 2021
+and January 2022, extracts their demographics and PCR results, and makes a
+small analysis data set:
 
 ```r
-library(devtools)
-install_github("mathzero/reactextract")
 library(reactextract)
-```
 
-The package does not contain database credentials. Oracle access uses the
-enclave's existing `DBI`, `odbc`, Oracle client and driver configuration.
-
-## Start with fictional data
-
-This example creates 500 fictional participants in two rounds and extracts the
-acute-symptoms topic:
-
-```r
-fake_source <- react_synthetic(
-  n_per_round = c(
-    REACT1_R07 = 500L,
-    REACT2_S5_R03 = 500L
-  ),
+# 1. Set up a synthetic source. The seed makes the result reproducible.
+source <- react_synthetic(
+  n_per_round = c(REACT1_R08 = 2000L, REACT1_R17 = 2000L),
   seed = 2026L
 )
 
-fake_result <- react_extract(
-  fake_source,
-  families = "health/acute-symptoms",
-  rounds = c("REACT1_R07", "REACT2_S5_R03"),
-  progress = TRUE
+# 2. Extract two topics.
+result <- react_extract(
+  source,
+  families = c("people-households/demographics", "infection-measurement/laboratory")
 )
+result
 
-head(fake_result$data)
+# 3. Build an analysis data set with short column names and a PCR outcome.
+dat <- react_short_names(result)
+dat$pcr_positive <- react_derive_estbinres(result)
+dat$age_group <- react_derive_age_group(result)
+
+table(dat$survey_id, dat$pcr_positive, useNA = "ifany")
+prop.table(table(dat$age_group, dat$pcr_positive), margin = 2)
+
+# 4. Save it.
+saveRDS(dat, "react_synthetic_demo.rds")
 ```
 
-The default creates 1,000 fictional participants in every round:
+The same seed, sample sizes and request always give exactly the same data.
+
+## Choosing variables
+
+### Fields, concepts and topics
+
+REACT variables are organised at three levels:
+
+- A **field** is an exact variable in one round's data set, such as `SMOKENOW`.
+  The same question can have different field names in different rounds.
+- A **concept** groups the fields that measure the same thing across rounds,
+  such as `behaviours_mobility.behaviours.current_cigarette_smoking`.
+- A **topic** (or family) groups related concepts, such as
+  `behaviours-mobility/behaviours`.
+
+`react_extract()` accepts topics through `families`, concepts through `concepts`,
+and rounds through `rounds`. You always get every field belonging to what you
+request.
+
+### Find variables on the wiki
+
+The [wiki](https://mathzero.github.io/react_wiki/) is the best place to browse.
+Search for a word, open a variable to see its exact question, response options
+and which rounds asked it, and add it to **Your shortlist**. The shortlist page
+writes the `react_extract()` code for you:
 
 ```r
-fake_result <- react_extract(react_synthetic(
-  seed = 1L
-))
+result <- reactextract::react_extract(
+  source,
+  concepts = c(
+    "behaviours_mobility.behaviours.current_cigarette_smoking",
+    "people_households.demographics.ethnic_group"
+  )
+)
 ```
 
-This produces 25,000 independent fictional observations. A fixed seed gives
-the same values every time, making examples and tests reproducible.
+Create `source` with `react_synthetic()` first, as in the quick start.
 
-The approved synthetic profile preserves:
+### Find variables in R
 
-- exact round-specific raw field names;
-- reviewed public response codes and missing-value types;
-- approved questionnaire routing, including downstream questions; and
-- the same cleaning and harmonisation code used for real extraction.
-
-Version 0.5.6 uses the formally approved v5 profile. In addition to each
-field's round-specific distribution, it includes a small reviewed set of
-relationships centred on PCR positivity in REACT-1 and IgG antibody positivity
-in REACT-2. The result manifest records
-`synthetic_dependency_model = outcome_centred_v5` when these tables are used.
-
-Synthetic identifiers are newly created and visibly fictional. Real participant
-identifiers and respondent text are never included in the profile or generated
-output.
-
-## Extract real data
-
-Create an Oracle connection using the enclave's normal credential process, then
-pass that connection to `react_oracle()`:
+`react_search()` searches concept names, raw field names and question wording:
 
 ```r
-con <- DBI::dbConnect(
-  odbc::odbc(),
-  Driver = "Oracle in instantclient_23_0",
-  DBQ = "se-enclaves-db02.sm.med.ic.ac.uk:1521/react",
-  SVC = "REACT_V",
-  UID = Sys.getenv("REACT_DB_USER"),
-  PWD = Sys.getenv("REACT_DB_PASSWORD")
-)
-
-real_source <- react_oracle(con)
-
-real_result <- react_extract(
-  real_source,
-  families = "health/acute-symptoms",
-  rounds = c("REACT1_R07", "REACT2_S5_R03"),
-  progress = TRUE
-)
-
-DBI::dbDisconnect(con)
+react_search("smok")
+react_search("U_AGE")                      # a raw field name
+react_search("vaccin", study = "react2")   # only REACT-2
 ```
 
-The default requests every dictionary topic and all 25 rounds:
+Each match shows the concept ID to use in `react_extract()`, its topic, its raw
+fields, the rounds that asked it and a typical question. `react_families()`
+lists all topics.
+
+### Choose rounds and sample sizes
+
+`n_per_round` sets how many fictional people to create in each round. A single
+number applies to all 25 rounds; a named vector creates only the rounds you
+name:
 
 ```r
-real_result <- react_extract(react_oracle(con))
+react_synthetic(n_per_round = 1000L)                              # every round
+react_synthetic(n_per_round = c(REACT1_R16 = 5000L, REACT1_R17 = 5000L))
 ```
 
-The extractor selects only required identifiers and fields, works through
-rounds sequentially, and reports partial failures without joining independently
-queried columns by row position.
+`react_extract()` then returns every round in the source unless you set
+`rounds`.
 
-## Move the same analysis into the enclave
+### Things to watch
 
-Put the extraction request in one function:
+- **`families` and `concepts` combine as a filter.** If you give both, you get
+  only the concepts that are *inside* those families. To combine a topic with a
+  few extra variables, list everything in `concepts` instead.
+- **Larger requests take longer.** Each round is generated in full behind the
+  scenes, so time depends mostly on the number of rounds and people:
+
+  | Request | Time | Memory |
+  |---|---|---|
+  | A few topics, 2–3 rounds, up to 5,000 people per round | seconds | small |
+  | All topics, all 25 rounds, 1,000 people per round | about 2 minutes | about 1.5 GB |
+  | 6 topics, 19 rounds, 20,000 people per round (380,000 rows) | about 3–4 minutes | about 6 GB |
+
+  These timings are from a laptop. A few thousand people per round is plenty
+  for building a pipeline.
+
+## Understanding the result
+
+`react_extract()` returns a list. Printing it gives a short summary. The two
+tables you will mostly use have one row per participant per round, in the same
+order:
+
+| Table | Contents |
+|---|---|
+| `result$data` | Cleaned data: response codes replaced by labels and missing codes set to `NA` |
+| `result$raw_data` | Raw data: the exact fields and codes as they appear in the REACT database |
+
+Both start with identifier columns: `observation_id`, `study_id`, `round_id`,
+`survey_id`, the participant codes `U_PASSCODE` and `SUBJECT_ID`, and
+`visit_number`. In synthetic data, every row is a different person.
+
+### Column names
+
+Cleaned columns are named by concept, for example
+`people_households.demographics.gender`. When a concept has several fields, the
+field name is added: `people_households.demographics.age__field__U_AGE`.
+`react_short_names()` shortens these to `gender` and `age_U_AGE`.
+
+### Missing values
+
+The raw data use negative codes to say why an answer is missing. In
+`result$data` they all become `NA`; in `result$raw_data` they are kept.
+
+| Code | Meaning |
+|---|---|
+| `-77` | Survey non-response: the participant did not complete this part of the questionnaire |
+| `-91` | Not applicable: the question was not asked because of an earlier answer |
+| `-92` | Item non-response: the question was asked but not answered |
+| `-99`, `-66`, `-555` | Rarer missing codes; check the variable's page on the wiki |
+| `NA` | Missing in the database |
+
+### Coding can change between rounds
+
+Questions, response options and codes were revised over time, so check a
+variable round by round before pooling rounds. For example, `AGE_GROUP` has
+labelled bands such as `55 to 64` in most REACT-1 rounds, but the source
+documentation for some rounds, including all of REACT-2, has no labels, so the
+cleaned column keeps codes such as `5` there. `react_derive_age_group()` gives
+consistent groups from exact age. To see how a concept's codes map to cleaned
+labels in each round:
+
+```r
+react_concept_coding("behaviours_mobility.behaviours.current_cigarette_smoking")
+```
+
+### Supporting tables
+
+- `result$column_dictionary`: which raw fields and rounds feed each cleaned column.
+- `result$issues`: anything the extraction could not provide or had to adjust.
+  A few warnings are normal; most say that an unexpected value was kept exactly
+  as it appears in the source.
+- `result$manifest`: the package and dictionary versions, the request, the
+  synthetic seed and profile, and timings.
+
+## Deriving analysis variables
+
+Common REACT analysis variables are not added automatically, because each is an
+analysis decision. These functions create them from the raw fields:
+
+| Function | Creates | Applies to |
+|---|---|---|
+| `react_derive_estbinres()` | PCR positivity, the established REACT-1 definition (1/0) | REACT-1 |
+| `react_derive_igg()` | IgG antibody positivity (1/0) | REACT-2 |
+| `react_derive_age_group()` | Fixed age groups from `U_AGE` | REACT-1 |
+| `react_derive_imd_quintile()` | Index of Multiple Deprivation quintile (1 = most deprived) | REACT-1 |
+| `react_derive_household_size()` | Number of people in the household | REACT-1 |
+| `react_derive_bmi()` | Body mass index | REACT-1 rounds 2–19 |
+| `react_bmi_category()` | Adult BMI category | Any |
+
+Each function takes the extraction result and returns one value per row, in the
+same order as `result$data`:
+
+```r
+result <- react_extract(
+  react_synthetic(n_per_round = c(REACT1_R17 = 5000L), seed = 1L),
+  families = c(
+    "infection-measurement/laboratory",
+    "people-households/demographics",
+    "people-households/housing"
+  )
+)
+
+dat <- react_short_names(result)
+dat$pcr_positive <- react_derive_estbinres(result)
+dat$imd_quintile <- react_derive_imd_quintile(result)
+```
+
+If a function needs a raw field you did not extract, it stops and tells you
+which topic to add. The [derived-variable guide](inst/DERIVED_VARIABLES.md)
+explains each definition and its limitations.
+
+## Saving your data
+
+Save an analysis data set with `saveRDS()` and read it back with `readRDS()`:
+
+```r
+saveRDS(dat, "react_synthetic_analysis.rds")
+dat <- readRDS("react_synthetic_analysis.rds")
+```
+
+To keep the whole result, including the raw data and supporting tables, use
+`react_write(result, "react_result.rds")`.
+
+## Moving your analysis to the real data
+
+Synthetic and real extractions return exactly the same tables, columns and
+coding, so code written against `result$data` or `result$raw_data` runs
+unchanged on the real data. The simplest way to keep the switch to one line is
+to put the extraction in a function that takes the source:
 
 ```r
 get_analysis_data <- function(source) {
-  react_extract(
+  result <- react_extract(
     source,
-    families = "health/acute-symptoms",
-    rounds = c("REACT1_R07", "REACT2_S5_R03"),
-    progress = TRUE
+    families = c("people-households/demographics", "infection-measurement/laboratory"),
+    rounds = c("REACT1_R08", "REACT1_R17")
   )
+  dat <- react_short_names(result)
+  dat$pcr_positive <- react_derive_estbinres(result)
+  dat
 }
+
+# While developing
+dat <- get_analysis_data(react_synthetic(
+  n_per_round = c(REACT1_R08 = 2000L, REACT1_R17 = 2000L),
+  seed = 2026L
+))
+
+# Inside the secure environment, with a database connection `con`
+dat <- get_analysis_data(react_oracle(con))
 ```
 
-Develop outside the enclave:
+The real data can only be used inside the secure REACT data environment, and
+extracted records must never leave it. Access is by application: see
+[REACT data access requests](https://www.imperial.ac.uk/medicine/research-and-impact/groups/react-study/data-access-requests/).
+Connecting to the database, extracting from round files, output options and the
+cleaning rules are described in the [advanced guide](inst/ADVANCED_GUIDE.md),
+and installation inside the secure environment in the
+[enclave installation guide](inst/ENCLAVE_INSTALL.md).
 
-```r
-result <- get_analysis_data(
-  react_synthetic(
-    n_per_round = c(REACT1_R07 = 500L, REACT2_S5_R03 = 500L),
-    seed = 2026L
-  )
-)
-```
+## What the synthetic data capture
 
-Then run the same function on real data inside the enclave:
+Synthetic records are generated round by round from the approved
+`react-synthetic-profile-v5`. That profile is a set of summary tables made inside
+the secure environment: counts below 10 are suppressed, other counts are rounded
+to the nearest 5, and the tables passed formal disclosure review.
 
-```r
-result <- get_analysis_data(react_oracle(con))
-```
+**Captured**
 
-Code written against `result$data`, `result$raw_data` or the detailed result
-tables can therefore be transferred without changing their structure.
+- Each round's distribution for every field, so values, missing codes and trends
+  over time follow the real rounds.
+- Questionnaire routing: participants are only asked questions that applied to
+  them.
+- The same cleaning and labelling as the real data.
+- Relationships between the main outcomes and a set of key characteristics:
 
-## Extract from files
+  | Outcome | Related characteristics |
+  |---|---|
+  | REACT-1 PCR positivity | Age, gender, ethnicity, region, deprivation, economic activity, previous COVID-19 and contact with a confirmed case (all rounds); household size (rounds 1 and 4–19); symptoms (rounds 2–19); key-worker or care role (rounds 2–3 and 5–19); vaccination (rounds 8–19) |
+  | REACT-2 IgG positivity | Age, gender, ethnicity, region, deprivation, household size, economic activity and previous COVID-19 (all rounds); key-worker or care role (rounds 2–4); vaccination (rounds 5–6) |
 
-Round files are useful for local validation inside an approved environment:
+**Not captured**
 
-```r
-file_source <- react_files("D:/react_round_files")
-result <- react_extract(file_source, families = "vaccination")
-```
+- **Other relationships between variables.** Apart from the outcome
+  relationships above, variables are generated independently. For example, age
+  and smoking are unrelated, so a table comparing groups on any other outcome
+  shows only chance differences.
+- **Follow-up of the same people.** Every row is a different person, even
+  across rounds.
+- **Free text.** Write-in answers are replaced by the phrase `Synthetic response`.
+- **Some withheld groups.** Where a protected table withheld a group, the
+  synthetic data cannot recreate it. Almost nobody aged 85 or over appears in
+  REACT-1 rounds. In some rounds, an outcome relationship is not generated for
+  a characteristic whose table was partly withheld.
+- **REACT-2 IMD quintile.** The `IMD_QUINTILE` field in synthetic REACT-2 data
+  contains implausible values; use `IMD_DECILE` instead.
+- **A few labels contain `?`** where the source questionnaire had an apostrophe
+  or dash, for example `Can?t tell what the result is`.
 
-RDS, CSV and Parquet round files are supported. Files may use either the round
-ID (`react1.r01.rds`) or survey ID (`REACT1_R01.rds`). Named in-memory data
-frames are also accepted:
+## Getting help
 
-```r
-file_source <- react_files(list(react1.r01 = round_1_data))
-```
-
-CSV import preserves the literal text `"NA"` rather than silently converting
-it to a database missing value.
-
-## Choose variables by topic or concept
-
-Request a family:
-
-```r
-result <- react_extract(
-  source,
-  families = "vaccination",
-  rounds = c("REACT1_R10", "REACT1_R19")
-)
-```
-
-Or request a specific reviewed concept:
-
-```r
-result <- react_extract(
-  source,
-  concepts = "health.preexisting.overweight",
-  rounds = "REACT1_R01"
-)
-```
-
-Use `react_families()` to see available topics. The
-[REACT metadata wiki](https://mathzero.github.io/react_wiki/) shows concepts,
-raw field names, round coverage, response coding and approved distributions.
-
-## Results
-
-The default output is deliberately compact and centres on two researcher-ready
-wide tables:
-
-- `result$data`: identifiers followed by cleaned concept columns;
-- `result$raw_data`: the same identifiers followed by exact source fields.
-
-```r
-result$data
-result$raw_data
-```
-
-The default result also contains small supporting tables:
-
-- `observations`: study, round, participant keys and visit order;
-- `column_dictionary`: the fields and rounds contributing to each output column;
-- `issues`: unavailable fields, unexpected codes and partial failures;
-- `manifest`: package, dictionary, source, request, counts and stage timings.
-
-Detailed typed values are available when they are genuinely needed, but are not
-retained by default because an all-round extraction would otherwise contain
-tens of millions of long rows:
-
-```r
-long_result <- react_extract(source, output = "long")
-full_result <- react_extract(source, output = "both")
-```
-
-`output = "long"` omits the wide tables and returns `raw_values` and
-`harmonised_values`. `output = "both"` returns all eight tables. Profiling an
-extraction result requires one of these long-enabled modes; large enclave
-profiles should use `react_profile_source()` directly.
-
-Use the column dictionary whenever a concept has multiple component fields:
-
-```r
-result$column_dictionary
-```
-
-Single-field concepts use their full topic-prefixed concept ID. Genuine
-multi-item outputs use `concept_id__field__EXACT_RAW_FIELD`; the marker can be
-removed when grouping components:
-
-```r
-sub("__field__.*$", "", names(result$data))
-```
-
-## Cleaning and harmonisation
-
-Exact raw values are always retained. Cleaned output applies only decisions
-reviewed in the shared wiki dictionary:
-
-- approved scientific transforms are applied as written;
-- documented category labels and administrative missing codes are standardised;
-- fields are merged only where the reviewed evidence supports equivalence; and
-- uncertain concepts remain source-preserving rather than being guessed.
-
-Inspect the relevant decisions offline:
-
-```r
-react_concept_coding("health.acute_symptoms.cough")
-react_harmonisation_notes()
-react_harmonisation_decisions()
-```
-
-The package does not automatically calculate analysis measures such as BMI,
-household size or laboratory thresholds. Optional, transparent REACT-1 code
-for established PCR positivity (`estbinres`), IMD quintile, fixed age groups,
-household size and BMI is provided in the
-[derived-variable recipes](inst/DERIVED_VARIABLES.md). Each recipe lists its
-exact raw inputs, round-specific decisions and known limitations.
-
-## Planned participation upgrade
-
-The [participation and eligibility decisions](inst/PARTICIPATION_V6_DECISIONS.md)
-record confirmed age definitions and working assumptions for the planned v6
-synthetic-data upgrade. They distinguish shared survey non-response from
-historical missing-code exceptions and explain the age-based mail-group proxy.
-These changes are **not yet applied by the released v5 generator**. The document
-is copied unchanged from the REACT wiki so both resources use the same decisions.
-
-## Progress and validation
-
-With `progress = TRUE`, extraction reports the current round, requested fields,
-records received and elapsed time. It then reports combining, visit assignment,
-harmonisation, table creation and validation. Stage timings are saved in the
-result manifest.
-
-Before a first real extraction, run the read-only enclave acceptance workflow:
-
-```sh
-Rscript enclave/run_acceptance.R connection.R reactextract-acceptance
-```
-
-See [the enclave installation guide](inst/ENCLAVE_INSTALL.md) for setup details.
-
-## What fictional data are for
-
-Synthetic REACT data are designed for:
-
-- writing and debugging extraction requests;
-- developing cleaning and analysis code;
-- checking joins, reshaping and plotting;
-- creating reproducible examples; and
-- testing that code will accept the real result structure.
-
-The default generator uses the formally approved, disclosure-controlled
-`react-synthetic-profile-v5` round distributions. The package verifies the
-profile archive, its table manifest, the exact rc14 dictionary checksum and the
-approval record before generating any values. A public-domain-only fallback
-remains available for package testing with
-`react_synthetic_profile(development = TRUE)`.
-
-The v5 profile separates exact zero from positive Ct/Cp measurements,
-preserves occurrence-specific laboratory-result categories and the source's
-exact single-space missing value, and supplies the reviewed outcome-centred
-dependency tables. These relationships make the fictional data more useful for
-developing analyses of the studies' main outcomes; they are not a general model
-of the real joint data distribution.
-
-PCR profiling is deliberately strict and occurrence-specific. Exact `Not
-Detected` is negative in the common support; Round 11 also has the reviewed
-lowercase value `negative`. Round 2 `FINALRESULT = "Rejected"` and Round 13
-`RESULT = "ambiguous"` are missing/non-evaluable. These decisions apply only to
-those exact occurrences. Every unfamiliar label remains missing, is reported,
-and must be reviewed before it can enter the shared dictionary.
-
-Neither form of synthetic data is suitable for prevalence estimation,
-hypothesis testing, power calculations or substantive scientific conclusions.
-The released aggregates are rounded and disclosure-controlled. Apart from the
-reviewed outcome-centred dependencies and approved questionnaire routing,
-general relationships between variables are not modelled.
+- The [REACT data wiki](https://mathzero.github.io/react_wiki/) documents every
+  variable and round.
+- Every function has a help page, for example `?react_extract`, `?react_search`
+  or `?react_derive_estbinres`.
+- Report problems or suggestions on
+  [GitHub Issues](https://github.com/mathzero/reactextract/issues).
 
 ## Licences
 
-Package code is MIT licensed. Bundled dictionary metadata is CC BY 4.0 and
-retains its attribution and checksums. The dictionary, concept links,
-harmonisation rules and questionnaire routing are maintained in
-[`react_wiki`](https://github.com/mathzero/react_wiki), then included here as a
-pinned release rather than duplicated as separate scientific decisions.
+Package code is MIT licensed. The bundled REACT dictionary metadata is licensed
+CC BY 4.0. To cite the REACT data dictionary, see
+[How to cite](https://mathzero.github.io/react_wiki/cite.html) on the wiki.

@@ -14,3 +14,7 @@
 ^\.Rproj\.user$
 ^inst/extdata/eligibility-context\.tar\.gz$
 ^inst/extdata/response-options\.tar\.gz$
+^CLAUDE\.md$
+^CLAUDE\.local\.md$
+^\.claude$
+^\.mcp\.json$

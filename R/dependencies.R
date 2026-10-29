@@ -1187,12 +1187,51 @@
         source, round_id, local[index, , drop = FALSE], state, nrow(data),
         dictionary = dictionary
       )
+      predictor <- .retain_marginal_for_hidden_levels(
+        data, predictor, source, round_id, local[index, , drop = FALSE], state,
+        dictionary
+      )
       data <- .set_dependency_predictor(
         data, predictor, local[index, , drop = FALSE], dictionary, source
       )
     }
   }
   data
+}
+
+# A conditional table cannot represent a suppressed predictor level, so
+# sampling from it all but removes that level. That is harmless for a primary
+# suppressed cell (fewer than 10 records) but not for a large cell withheld by
+# complementary suppression. When the approved marginal draw implies a hidden
+# level is far larger than primary suppression allows, keep each row's
+# marginal state for that outcome level instead. No hidden count is estimated
+# or used for sampling.
+.retain_marginal_for_hidden_levels <- function(data, predictor, source, round_id,
+                                               spec, outcome, dictionary,
+                                               records_per_hidden_level = 50) {
+  rows <- source$profile$dependency_counts[
+    source$profile$dependency_counts$round_id == round_id &
+      source$profile$dependency_counts$dependency_id == spec$dependency_id[[1L]],
+    , drop = FALSE
+  ]
+  if (!nrow(rows)) return(predictor)
+  counts <- suppressWarnings(as.numeric(rows$count))
+  original <- .dependency_predictor_state(data, spec, dictionary)
+  for (outcome_level in unique(outcome)) {
+    local <- rows$outcome_level == outcome_level
+    hidden <- unique(rows$predictor_level[
+      local & is.na(counts) & rows$predictor_level != "missing"
+    ])
+    if (!length(hidden)) next
+    positions <- which(outcome == outcome_level)
+    share <- mean(original[positions] %in% hidden)
+    released <- sum(counts[local], na.rm = TRUE)
+    expected_hidden <- if (share < 1) released * share / (1 - share) else Inf
+    if (expected_hidden >= records_per_hidden_level * length(hidden)) {
+      predictor[positions] <- original[positions]
+    }
+  }
+  predictor
 }
 
 .reapply_synthetic_outcomes <- function(data, occurrences, source, dictionary) {

@@ -1,5 +1,5 @@
 test_that("approved participation inputs remain immutable and separate from v5", {
-  p<-react_synthetic_profile(refresh=TRUE)
+  p<-v6_profile(refresh=TRUE)
   expect_true(is.list(p$participation))
   expect_identical(p$participation$approval[["status"]],"formally_approved")
   expect_identical(p$participation$metadata[["generator_ready"]],"FALSE")
@@ -18,7 +18,7 @@ test_that("approved participation inputs remain immutable and separate from v5",
 })
 
 test_that("shared state follows the released binary rate without smoothing hidden rates", {
-  s<-react_synthetic(n_per_round=10000L,seed=177L);d<-react_dictionary()
+  s<-react_synthetic(v6_profile(), n_per_round=10000L,seed=177L);d<-react_dictionary()
   x<-.participation_context(s,"react1.r02",10000L,d)
   q<-s$profile$participation$counts
   q<-q[q$table=="round_participation"&q$round_id=="react1.r02",]
@@ -35,7 +35,7 @@ test_that("shared state follows the released binary rate without smoothing hidde
 })
 
 test_that("mandatory conditions preserve independent fields and date types", {
-  s<-react_synthetic(n_per_round=4L);d<-react_dictionary()
+  s<-react_synthetic(v6_profile(), n_per_round=4L);d<-react_dictionary()
   p<-s$profile$participation$occurrences
   o<-d$occurrences[d$occurrences$round_id=="react1.r10"&d$occurrences$variable%in%c("SMOKENOW","U_AGE","RESULT"),]
   expect_equal(nrow(o),3L)
@@ -67,7 +67,7 @@ test_that("missing codes cannot open strict answer comparisons", {
 })
 
 test_that("all-field round output aligns nonresponse and blocks adult-only children", {
-  s<-react_synthetic(n_per_round=c(REACT1_R02=80L),seed=88L);d<-react_dictionary()
+  s<-react_synthetic(v6_profile(), n_per_round=c(REACT1_R02=80L),seed=88L);d<-react_dictionary()
   o<-d$occurrences[d$occurrences$round_id=="react1.r02",]
   reg<-d$source_registry[d$source_registry$round_id=="react1.r02",]
   z<-.read_synthetic_round(s,reg,o,d);x<-z$data
@@ -91,7 +91,7 @@ test_that("all-field round output aligns nonresponse and blocks adult-only child
 })
 
 test_that("preview provenance survives long and wide extraction", {
-  s<-react_synthetic(n_per_round=c(REACT1_R02=60L,REACT2_S5_R01=60L),seed=15L)
+  s<-react_synthetic(v6_profile(), n_per_round=c(REACT1_R02=60L,REACT2_S5_R01=60L),seed=15L)
   a<-react_extract(s,concepts="health.preexisting.overweight",rounds=names(s$n_per_round),output="both",progress=FALSE)
   b<-react_extract(s,concepts="health.preexisting.overweight",rounds=names(s$n_per_round),output="wide",progress=FALSE)
   expect_identical(a$data,b$data);expect_identical(a$raw_data,b$raw_data)

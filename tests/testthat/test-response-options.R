@@ -10,7 +10,7 @@ test_that("only approved exact options enter the generator", {
   expect_error(.validate_response_options(bad,d),"approval")
   bad <- x; bad$conditions$context_key[1] <- "unverified_mailgroup"
   expect_error(.validate_response_options(bad,d),"context source")
-  p <- react_synthetic_profile(); p$response_options$rules$selected_code[1] <- "2"
+  p <- v6_profile(); p$response_options$rules$selected_code[1] <- "2"
   expect_error(react_synthetic(p),"missing or changed")
   expect_null(react_synthetic_profile(version="v5")$response_options)
 })
@@ -40,7 +40,7 @@ test_that("all option boundaries and missing parents are respected", {
 })
 
 test_that("sampling and its public prior never populate unavailable options", {
-  s <- react_synthetic(n_per_round=12L); d <- react_dictionary(); x <- s$profile$response_options
+  s <- react_synthetic(v6_profile(), n_per_round=12L); d <- react_dictionary(); x <- s$profile$response_options
   id <- x$targets$target_occurrence_id[1]; o <- d$occurrences[match(id,d$occurrences$occurrence_id),]
   eligible <- rep(c(TRUE,FALSE),6)
   z <- .participation_value(s,o,12,d,eligible=eligible)
@@ -55,7 +55,7 @@ test_that("sampling and its public prior never populate unavailable options", {
 })
 
 test_that("shared nonresponse wins over option unavailability", {
-  s <- react_synthetic(n_per_round=3L); d <- react_dictionary(); x <- s$profile$response_options
+  s <- react_synthetic(v6_profile(), n_per_round=3L); d <- react_dictionary(); x <- s$profile$response_options
   o <- d$occurrences[d$occurrences$round_id=="react1.r17",]
   id <- o$occurrence_id[o$variable=="VACCRUFUSE1_14"]
   context <- list(age=c(12,55,30),nonresponse=c(TRUE,FALSE,FALSE))
@@ -67,7 +67,7 @@ test_that("shared nonresponse wins over option unavailability", {
 })
 
 test_that("option parents are internal and selection does not change values", {
-  s <- react_synthetic(n_per_round=45L,seed=603L); d <- react_dictionary()
+  s <- react_synthetic(v6_profile(), n_per_round=45L,seed=603L); d <- react_dictionary()
   o <- d$occurrences[d$occurrences$round_id=="react1.r17" & d$occurrences$variable=="VACCRUFUSE2_14",]
   needed <- .synthetic_generation_occurrences(d,o,"react1.r17",s)
   expect_true(all(c("U_GENDER","U_AGE") %in% needed$variable))

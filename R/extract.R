@@ -509,7 +509,8 @@
 #'   [react_synthetic()].
 #' @param families `all` or dictionary family selectors returned by
 #'   [react_families()].
-#' @param rounds `all`, round IDs, or survey IDs.
+#' @param rounds `all`, round IDs, or survey IDs. For a synthetic source, `all`
+#'   means every round that has records in `n_per_round`.
 #' @param concepts Optional exact concept IDs used as an additional filter.
 #' @param progress Show round and processing-stage progress. Updates include
 #'   requested fields, records received, and elapsed time. Defaults to on in
@@ -545,6 +546,9 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
   stage_started <- .extract_clock()
   .progress_stage_start(progress, "loading dictionary and selecting fields")
   dictionary <- react_dictionary()
+  if (inherits(source, "react_synthetic_source")) {
+    rounds <- .synthetic_extract_rounds(source, rounds, dictionary$rounds)
+  }
   selected <- .select_occurrences(dictionary, families, rounds, concepts)
   requested_rounds <- .resolve_rounds(rounds, dictionary$rounds)
   selected_output_plan <- dictionary$concept_output_columns[
@@ -926,7 +930,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
 print.react_extract_result <- function(x, ...) {
   metadata <- stats::setNames(x$manifest$value, x$manifest$key)
   value <- function(key, fallback = "0") {
-    out <- unname(metadata[[key]])
+    out <- if (key %in% names(metadata)) unname(metadata[[key]]) else NULL
     if (is.null(out) || is.na(out) || !nzchar(out)) fallback else out
   }
   number <- function(key) {
@@ -935,7 +939,9 @@ print.react_extract_result <- function(x, ...) {
   cat("<reactextract result>\n")
   cat("  Output: ", value("output_mode", "both"), "\n", sep = "")
   if(value("synthetic_release_readiness","")=="preview_not_full_v6_acceptance")
-    cat("  Synthetic model: v6 participation preview (see issues and manifest)\n")
+    cat("  Synthetic model: v6 experimental preview (see issues and manifest)\n")
+  else if (value("synthetic_dependency_model", "") == "outcome_centred_v5")
+    cat("  Synthetic model: v5 approved profile\n")
   cat("  Observations: ", number("observation_count"), "\n", sep = "")
   if (value("output_mode", "both") %in% c("wide", "both")) {
     cat("  Harmonised table: ", number("data_column_count"), " columns\n", sep = "")

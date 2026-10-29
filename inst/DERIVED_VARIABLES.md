@@ -1,20 +1,34 @@
 # Derived-variable recipes
 
-These optional recipes add commonly used REACT-1 analysis variables to a
-`reactextract` result. They are not applied automatically because they involve
-analysis decisions rather than straightforward cleaning or harmonisation.
+These functions add commonly used REACT analysis variables to a `reactextract`
+result. They are not applied automatically because they involve analysis
+decisions rather than straightforward cleaning or harmonisation.
 
 The recipes:
 
 - leave the extracted raw values unchanged;
 - use exact source field names;
-- apply only to REACT-1 rounds 1–19; and
+- apply to the rounds stated for each function and return `NA` elsewhere; and
 - identify where a recipe deliberately differs from the historical round
   wrangling scripts.
 
 They are intended to make an analysis reproducible, not to define new clinical
 or diagnostic standards. Check that a recipe is appropriate for the analysis
 before using it.
+
+| Function | Variable | Studies and rounds | Raw inputs |
+|---|---|---|---|
+| `react_derive_estbinres()` | Established PCR positivity (1/0) | REACT-1 rounds 1–19 | `RESULT`, `FINALRESULT`, `LAB`, Ct fields |
+| `react_derive_igg()` | IgG antibody positivity (1/0) | REACT-2 rounds 1–6 | `NEWRESULT` |
+| `react_derive_age_group()` | Fixed age groups | REACT-1 rounds 1–19 | `U_AGE` |
+| `react_derive_imd_quintile()` | IMD quintile (1 most deprived) | REACT-1 rounds 1–19 | `IMD_DECILE` |
+| `react_derive_household_size()` | Household size | REACT-1 rounds 1–19 | `NADULTS`, `NADULTS1`, `NCHILD`, `NCHILD1` |
+| `react_derive_bmi()` | Body mass index | REACT-1 rounds 2–19 | metric or imperial height and weight |
+| `react_bmi_category()` | Adult BMI category | any, from age 18 | a BMI and an age |
+
+The source code for every function is in
+[`R/derived.R`](https://github.com/mathzero/reactextract/blob/main/R/derived.R)
+and is written in plain base R so that each rule can be read and checked.
 
 ## Prepare an extraction
 
@@ -26,11 +40,11 @@ result <- react_extract(
   source,
   families = c(
     "infection-measurement/laboratory",
+    "infection-measurement/testing",
     "people-households/demographics",
     "people-households/household",
     "people-households/housing"
-  ),
-  rounds = sprintf("REACT1_R%02d", 1:19)
+  )
 )
 
 raw <- result$raw_data
@@ -42,307 +56,10 @@ stopifnot(identical(
 ))
 ```
 
-The default all-family extraction also contains these fields. When using only
-one recipe, a narrower extraction is possible; its function will report any raw
-fields that were not requested.
-
-The functions below use base R and can be copied together into an analysis
-script.
-
-```r
-as_numeric_raw <- function(x) {
-  suppressWarnings(as.numeric(as.character(x)))
-}
-
-require_columns_for <- function(data, rows, columns, recipe) {
-  missing <- setdiff(columns, names(data))
-
-  if (any(rows, na.rm = TRUE) && length(missing) > 0L) {
-    stop(
-      recipe, " needs raw column", if (length(missing) > 1L) "s " else " ",
-      paste(missing, collapse = ", "),
-      ". Re-run react_extract() with the relevant topic families.",
-      call. = FALSE
-    )
-  }
-
-  invisible(data)
-}
-
-react1_lab_result_state <- function(result, survey, field = "RESULT") {
-  result <- as.character(result)
-  survey <- as.character(survey)
-  state <- rep(NA_character_, length(result))
-  state[result == "Detected"] <- "positive"
-  state[result == "Not Detected"] <- "negative"
-  state[is.na(result) | result %in% c(
-    "", " ", "Void", "-91", "-92", "-77", "-66", "-99", "-555"
-  )] <- "missing"
-  state[
-    survey == "REACT1_R11" & field == "RESULT" & result == "negative"
-  ] <- "negative"
-  state[
-    survey == "REACT1_R13" & field == "RESULT" & result == "ambiguous"
-  ] <- "missing"
-  state[
-    survey == "REACT1_R02" & field == "FINALRESULT" & result == "Rejected"
-  ] <- "missing"
-  state
-}
-
-legacy_ct_positive <- function(result, ct1, ct2, survey, threshold = 37) {
-  result_state <- react1_lab_result_state(result, survey, "RESULT")
-  ct1 <- as_numeric_raw(ct1)
-  ct2 <- as_numeric_raw(ct2)
-
-  ifelse(
-    is.na(result_state) | result_state == "missing", NA_integer_,
-    ifelse(
-      result_state == "negative", 0L,
-      ifelse(
-        result_state == "positive",
-        ifelse(
-          ct1 > 0 & ct2 > 0, 1L,
-          ifelse(ct1 > 0 & ct1 < threshold, 1L, 0L)
-        ),
-        NA_integer_
-      )
-    )
-  )
-}
-
-derive_react1_estbinres <- function(raw_data) {
-  if (!is.data.frame(raw_data) || !("survey_id" %in% names(raw_data))) {
-    stop(
-      "`raw_data` must be result$raw_data and contain `survey_id`.",
-      call. = FALSE
-    )
-  }
-
-  survey <- as.character(raw_data$survey_id)
-  react1 <- survey %in% sprintf("REACT1_R%02d", 1:19)
-  output <- rep(NA_integer_, nrow(raw_data))
-
-  if (!any(react1)) {
-    return(output)
-  }
-
-  round_1 <- survey == "REACT1_R01"
-  require_columns_for(
-    raw_data,
-    round_1,
-    c("RESULT", "LAB", "CT_VALUE1", "CT_VALUE2"),
-    "`estbinres` for REACT-1 Round 1"
-  )
-
-  if (any(round_1)) {
-    result <- as.character(raw_data$RESULT[round_1])
-    result_state <- react1_lab_result_state(
-      result, survey[round_1], "RESULT"
-    )
-    lab <- as.character(raw_data$LAB[round_1])
-    ct1 <- as_numeric_raw(raw_data$CT_VALUE1[round_1])
-    ct2 <- as_numeric_raw(raw_data$CT_VALUE2[round_1])
-
-    output[round_1] <- ifelse(
-      is.na(result_state) | result_state == "missing", NA_integer_,
-      ifelse(
-        result_state == "negative", 0L,
-        ifelse(
-          result_state == "positive" & lab != "Eurofin", 1L,
-          ifelse(
-            ct1 > 0 & ct2 > 0, 1L,
-            ifelse(ct1 > 0 & ct1 < 37, 1L, 0L)
-          )
-        )
-      )
-    )
-  }
-
-  round_5 <- survey == "REACT1_R05"
-  require_columns_for(
-    raw_data,
-    round_5,
-    "FINALRESULT",
-    "`estbinres` for REACT-1 Round 5"
-  )
-
-  if (any(round_5)) {
-    final_result <- as.character(raw_data$FINALRESULT[round_5])
-    final_state <- react1_lab_result_state(
-      final_result, survey[round_5], "FINALRESULT"
-    )
-    output[round_5] <- ifelse(
-      is.na(final_state) | final_state == "missing", NA_integer_,
-      ifelse(final_state == "positive", 1L,
-        ifelse(final_state == "negative", 0L, NA_integer_))
-    )
-  }
-
-  early_rounds <- survey %in% sprintf("REACT1_R%02d", c(2:4, 6:7))
-  require_columns_for(
-    raw_data,
-    early_rounds,
-    c("RESULT", "CT_VALUE1", "CT_VALUE2"),
-    "`estbinres` for REACT-1 Rounds 2-4 and 6-7"
-  )
-
-  if (any(early_rounds)) {
-    output[early_rounds] <- legacy_ct_positive(
-      raw_data$RESULT[early_rounds],
-      raw_data$CT_VALUE1[early_rounds],
-      raw_data$CT_VALUE2[early_rounds],
-      survey[early_rounds]
-    )
-  }
-
-  later_rounds <- survey %in% sprintf("REACT1_R%02d", 8:19)
-  require_columns_for(
-    raw_data,
-    later_rounds,
-    c("RESULT", "NGENE_CTVALUE", "EGENE_CTVALUE"),
-    "`estbinres` for REACT-1 Rounds 8-19"
-  )
-
-  if (any(later_rounds)) {
-    output[later_rounds] <- legacy_ct_positive(
-      raw_data$RESULT[later_rounds],
-      raw_data$NGENE_CTVALUE[later_rounds],
-      raw_data$EGENE_CTVALUE[later_rounds],
-      survey[later_rounds]
-    )
-  }
-
-  output
-}
-
-derive_react1_imd_quintile <- function(raw_data) {
-  survey <- as.character(raw_data$survey_id)
-  rows <- survey %in% sprintf("REACT1_R%02d", 1:19)
-  require_columns_for(raw_data, rows, "IMD_DECILE", "REACT-1 IMD quintile")
-
-  output <- rep(NA_integer_, nrow(raw_data))
-  if (any(rows)) {
-    decile <- as_numeric_raw(raw_data$IMD_DECILE[rows])
-    valid <- !is.na(decile) & decile %in% 1:10 & decile == floor(decile)
-    values <- rep(NA_integer_, sum(rows))
-    values[valid] <- as.integer(ceiling(decile[valid] / 2))
-    output[rows] <- values
-  }
-
-  output
-}
-
-derive_react1_age_group <- function(raw_data) {
-  survey <- as.character(raw_data$survey_id)
-  rows <- survey %in% sprintf("REACT1_R%02d", 1:19)
-  require_columns_for(raw_data, rows, "U_AGE", "REACT-1 age groups")
-
-  labels <- c(
-    "5-12", "13-17", "18-24", "25-34",
-    "35-44", "45-54", "55-64", "65+"
-  )
-  output <- factor(rep(NA_character_, nrow(raw_data)), levels = labels)
-
-  if (any(rows)) {
-    age <- as_numeric_raw(raw_data$U_AGE[rows])
-    output[rows] <- cut(
-      age,
-      breaks = c(4, 12, 17, 24, 34, 44, 54, 64, Inf),
-      labels = labels,
-      right = TRUE
-    )
-  }
-
-  output
-}
-
-derive_react1_household_size <- function(raw_data) {
-  survey <- as.character(raw_data$survey_id)
-  rows <- survey %in% sprintf("REACT1_R%02d", 1:19)
-  columns <- c("NADULTS", "NADULTS1", "NCHILD", "NCHILD1")
-  require_columns_for(raw_data, rows, columns, "REACT-1 household size")
-
-  output <- rep(NA_integer_, nrow(raw_data))
-  if (any(rows)) {
-    counts <- lapply(raw_data[rows, columns, drop = FALSE], as_numeric_raw)
-    counts <- as.data.frame(counts, check.names = FALSE)
-    counts[] <- lapply(counts, function(value) {
-      value[!is.finite(value) | value < 0] <- NA_real_
-      value
-    })
-
-    usable <- rowSums(!is.na(counts))
-    values <- rowSums(counts, na.rm = TRUE)
-    values[usable == 0L | values <= 0 | values != floor(values)] <- NA_real_
-    output[rows] <- as.integer(values)
-
-    both_adult_routes <- !is.na(counts$NADULTS) & !is.na(counts$NADULTS1)
-    both_child_routes <- !is.na(counts$NCHILD) & !is.na(counts$NCHILD1)
-    if (any(both_adult_routes | both_child_routes)) {
-      warning(
-        "Some rows populate both routed household-count alternatives; ",
-        "the historical recipe sums them. Check these rows before analysis.",
-        call. = FALSE
-      )
-    }
-  }
-
-  output
-}
-
-derive_react1_bmi <- function(raw_data) {
-  survey <- as.character(raw_data$survey_id)
-  rows <- survey %in% sprintf("REACT1_R%02d", 2:19)
-  columns <- c(
-    "WEIGHT_KG", "WEIGHT_S", "WEIGHT_P",
-    "HEIGHT_CM", "HEIGHT_FEET", "HEIGHT_INCHES"
-  )
-  require_columns_for(raw_data, rows, columns, "REACT-1 BMI")
-
-  bmi <- rep(NA_real_, nrow(raw_data))
-  if (any(rows)) {
-    kg <- as_numeric_raw(raw_data$WEIGHT_KG[rows])
-    stones <- as_numeric_raw(raw_data$WEIGHT_S[rows])
-    pounds <- as_numeric_raw(raw_data$WEIGHT_P[rows])
-    imperial_kg <- (stones * 14 + pounds) / 2.2
-    use_imperial_weight <- is.na(kg) | kg <= 0
-    kg[use_imperial_weight] <- imperial_kg[use_imperial_weight]
-    kg[!is.finite(kg) | kg <= 0] <- NA_real_
-
-    cm <- as_numeric_raw(raw_data$HEIGHT_CM[rows])
-    feet <- as_numeric_raw(raw_data$HEIGHT_FEET[rows])
-    inches <- as_numeric_raw(raw_data$HEIGHT_INCHES[rows])
-    imperial_cm <- (feet * 12 + inches) * 2.54
-    use_imperial_height <- is.na(cm) | cm <= 0
-    cm[use_imperial_height] <- imperial_cm[use_imperial_height]
-    cm[!is.finite(cm) | cm <= 0] <- NA_real_
-
-    values <- round(kg / (cm / 100)^2, 2)
-    values[!is.finite(values)] <- NA_real_
-    bmi[rows] <- values
-  }
-
-  bmi
-}
-
-derive_adult_bmi_category <- function(bmi, age) {
-  bmi <- as_numeric_raw(bmi)
-  age <- as_numeric_raw(age)
-  labels <- c("Underweight", "Normal weight", "Overweight", "Obese")
-  output <- factor(rep(NA_character_, length(bmi)), levels = labels)
-  adult <- !is.na(age) & age >= 18 & !is.na(bmi)
-
-  output[adult] <- cut(
-    bmi[adult],
-    breaks = c(-Inf, 18.5, 25, 30, Inf),
-    labels = labels,
-    right = FALSE
-  )
-
-  output
-}
-```
+Each function takes `result$raw_data` (or the whole `result`) and returns one
+value per row, in the same order as `result$data`. When using only one recipe,
+a narrower extraction is possible; the function stops and names any required
+raw fields that were not requested.
 
 ## Established PCR positivity (`estbinres`)
 
@@ -357,7 +74,7 @@ round-specific inputs.
 | 8–19 | `RESULT`, `NGENE_CTVALUE`, `EGENE_CTVALUE` | Use the Ct rule |
 
 ```r
-analysis_data$estbinres <- derive_react1_estbinres(raw)
+analysis_data$estbinres <- react_derive_estbinres(raw)
 
 table(
   analysis_data$survey_id,
@@ -393,7 +110,7 @@ outcome and sensitivity variables.
 The same decile-to-quintile conversion was used in all 19 rounds:
 
 ```r
-analysis_data$imd_quintile <- derive_react1_imd_quintile(raw)
+analysis_data$imd_quintile <- react_derive_imd_quintile(raw)
 
 analysis_data$imd_quintile_label <- factor(
   analysis_data$imd_quintile,
@@ -414,7 +131,7 @@ age of 65 or over as `75+`. This recipe uses fixed boundaries and therefore
 deliberately corrects those implementation problems.
 
 ```r
-analysis_data$age_group <- derive_react1_age_group(raw)
+analysis_data$age_group <- react_derive_age_group(raw)
 ```
 
 `U_AGE`, rather than `AGE`, is the field used by the historical scripts.
@@ -427,7 +144,7 @@ include the participant and others do not. The historical calculation assumes
 that the questionnaire routing was applied correctly.
 
 ```r
-analysis_data$hh_size <- derive_react1_household_size(raw)
+analysis_data$hh_size <- react_derive_household_size(raw)
 
 analysis_data$hh_size_group <- cut(
   analysis_data$hh_size,
@@ -455,8 +172,8 @@ Although the historical Round 1 script contains BMI code, these height and
 weight fields are not available for Round 1 through the current dictionary.
 
 ```r
-analysis_data$bmi <- derive_react1_bmi(raw)
-analysis_data$adult_bmi_category <- derive_adult_bmi_category(
+analysis_data$bmi <- react_derive_bmi(raw)
+analysis_data$adult_bmi_category <- react_bmi_category(
   analysis_data$bmi,
   raw$U_AGE
 )
@@ -475,6 +192,26 @@ Differences and limitations:
 - The recipe does not impose additional height, weight, or BMI plausibility
   limits. These should be defined in the analysis protocol if needed.
 
+## REACT-2 IgG antibody positivity
+
+REACT-2 participants reported the result of a home lateral flow antibody test.
+The reviewed outcome definition uses the detailed `NEWRESULT` coding:
+
+| `NEWRESULT` code | Meaning | `react_derive_igg()` |
+|---|---|---|
+| 0, 1 | Negative, or IgM-only positive | 0 |
+| 2, 3 | IgG positive (with or without an IgM line) | 1 |
+| 4–7 | Invalid, unreadable or not photographed | `NA` |
+| any other value | Missing | `NA` |
+
+```r
+analysis_data$igg_positive <- react_derive_igg(raw)
+```
+
+IgG positivity measures past infection or vaccination response, not protective
+immunity. From Round 5 onwards it also reflects vaccination, so analyses of past
+infection need to account for vaccination status.
+
 ## Add the new columns to the cleaned table
 
 The preparation example verifies that `result$data` and `result$raw_data` have
@@ -484,7 +221,7 @@ the same observation order. If an analysis has reordered either table, join by
 ```r
 derived <- data.frame(
   observation_id = raw$observation_id,
-  estbinres = derive_react1_estbinres(raw),
+  estbinres = react_derive_estbinres(raw),
   stringsAsFactors = FALSE
 )
 
@@ -512,17 +249,19 @@ presented as general reusable recipes:
 | Variant and repeat participation | They depend on separate lineage or participant-linkage products |
 
 These can be added after their definitions, inputs, and missing-value behaviour
-have been reviewed separately. None of the REACT-1 recipes on this page should
-be applied to REACT-2 without an independent review of the corresponding source
-fields and scientific definitions.
+have been reviewed separately. Apart from `react_derive_igg()`, none of the
+recipes on this page should be applied to REACT-2 without an independent review
+of the corresponding source fields and scientific definitions.
 
 ## Provenance
 
-These recipes were transcribed from the historical REACT-1 round wrangling
-scripts `0_data_wrangling_round1.R` through
+The REACT-1 recipes were transcribed from the historical REACT-1 round
+wrangling scripts `0_data_wrangling_round1.R` through
 `0_data_wrangling_round19.R` and `00_react1_data_combine.R`. The source audit
 distinguished active code from commented-out proposals and identified
 round-specific inputs, external dependencies, and known implementation defects.
+The REACT-2 IgG recipe applies the reviewed `react2_igg_positive_v1` outcome
+definition in the bundled dictionary, which the synthetic generator also uses.
 
 The [REACT metadata wiki](https://mathzero.github.io/react_wiki/) remains the
 source for raw field wording, response coding, availability, and reviewed
