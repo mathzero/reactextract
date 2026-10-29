@@ -24,6 +24,7 @@ copied <- c(
   file.copy("inst/ADVANCED_GUIDE.md", output, overwrite = TRUE),
   file.copy("inst/DERIVED_VARIABLES.md", output, overwrite = TRUE),
   file.copy("inst/HES_SYNTHETIC.md", output, overwrite = TRUE),
+  file.copy("inst/CONDITION_AGE_GRADIENTS.md", output, overwrite = TRUE),
   file.copy("inst/PARTICIPATION_V6_DECISIONS.md", output, overwrite = TRUE),
   file.copy("inst/extdata/dependency-models-v1.rds", output, overwrite = TRUE),
   file.copy("inst/extdata/dependency-models-v1-approval.csv", output, overwrite = TRUE),

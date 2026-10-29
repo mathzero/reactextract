@@ -601,6 +601,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
   )
   issue_parts <- list(crosswalk_result$issues, prepared_crosswalk$issues)
   participation_summaries <- character()
+  condition_summaries <- character()
   observation_parts <- list()
   raw_parts <- list()
   harmonised_parts <- list()
@@ -642,6 +643,7 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
     }
     issue_parts[[length(issue_parts) + 1L]] <- fetched$issues
     if(!is.null(fetched$participation_summary)) participation_summaries <- c(participation_summaries,fetched$participation_summary)
+    condition_summaries <- c(condition_summaries, fetched$condition_summary)
     if (is.null(fetched$data)) {
       round_timings[[gsub("[.]", "_", round_id)]] <- .elapsed_seconds(round_started)
       .progress_message(
@@ -850,6 +852,20 @@ react_extract <- function(source, families = "all", rounds = "all", concepts = N
       stringsAsFactors = FALSE
     )
     manifest <- rbind(manifest, synthetic_manifest)
+    if (!.has_participation(source)) {
+      manifest <- rbind(manifest, data.frame(
+        key = c(
+          "synthetic_condition_model", "synthetic_condition_gradients_sha256",
+          "synthetic_condition_calibration"
+        ),
+        value = c(
+          if (length(condition_summaries)) "public_age_sex_gradients_calibrated_to_profile" else "not_applied",
+          .condition_gradients_sha256,
+          paste(condition_summaries, collapse = "|")
+        ),
+        stringsAsFactors = FALSE
+      ))
+    }
     if(.has_participation(source)) {
       p <- source$profile$participation
       a <- p$availability

@@ -1,0 +1,17 @@
+condition,gradient,sources,note
+diabetes,age_and_sex,hse2019,
+heart_disease,age_and_sex,hse2017_cvd,"Any cardiovascular disease, which also includes stroke"
+hypertension,age_and_sex,hse2022,
+stroke,age_and_sex,hse2017_cvd,
+kidney_disease,age,hse2016_kidney_liver,All adults: no men aged 16-24 reported it
+liver_disease,age,hse2016_kidney_liver,"All adults: figures by sex rest on 158-509 people per cell, with zeros"
+asthma,age,hse2018_asthma,All persons: child figures by sex rest on fewer than 270 children per cell
+other_lung_condition,age,hse2010_respiratory,No all-adults figure is printed; the mean of men and women is used. No women aged 16-24 reported it
+cancer,age_and_sex,ndrs2022,"Registry data, not self-report, used as a proxy for currently having cancer"
+neurological_condition,age,hse2017_18_longstanding,All persons: child figures by sex are small. Dementia may be coded elsewhere
+anaemia,age_and_sex,hse2017_18_longstanding,'Blood and related organs' also includes other blood and immune conditions
+anxiety,age_and_sex,mhcyp2017|apms2023,The 11-16 figure is used for ages 11-15
+depression,age,mhcyp2017|apms2023,"All persons: the APMS 2023/4 figure for men aged 16-24 (0.4%, 145 men) is unstable. The 11-16 figure is used for ages 11-15"
+psychiatric_disorder,age,apms2023,Taken as severe mental illness; psychotic disorder is the APMS measure. No child figure is used
+weakened_immune_system,none,,No public prevalence by age found; independent of age
+organ_transplant_recipient,none,,No openly licensed prevalence by age found; independent of age

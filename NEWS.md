@@ -1,3 +1,30 @@
+# reactextract 0.6.0.9008 (development)
+
+- Synthetic pre-existing conditions (`health.preexisting.*`) now depend on age
+  and, for diabetes, heart disease, high blood pressure, stroke, cancer,
+  anaemia and anxiety, on sex. Before, every condition was equally common at
+  every age: diabetes and heart disease were reported by about 6% and 5% of
+  every age band from under 18 to 75+. The shape of each gradient comes from
+  public statistics for England (the Health Survey for England, the Adult
+  Psychiatric Morbidity Survey 2023/4, the Mental Health of Children and Young
+  People survey 2017 and NDRS cancer prevalence), not from REACT, and needed no
+  disclosure review. Each round's prevalence of every condition still matches
+  the approved `v5` profile: per round, the condition's logit in each age-sex
+  cell is solved against that round's synthetic age and sex distribution so
+  that the published odds ratios are kept. A shared tendency to report
+  conditions keeps the profile's share ticking "None of these", which is now
+  ticked only by people who report no condition. Someone who did not answer the
+  question now has the same missing code in every condition box. Weakened
+  immune system and organ transplant stay equally common at every age because
+  no suitable source was found. Requesting any condition generates the whole
+  block with age and gender, so values do not depend on which families or
+  concepts are extracted, and age and gender are unchanged. The gradients are
+  bundled as the checksum-pinned `condition-age-gradients-v1` with a provenance
+  record and are built by `scripts/condition_age_gradients/`; see
+  `inst/CONDITION_AGE_GRADIENTS.md`. The extraction manifest records each
+  round's calibration. The development profile and the experimental `v6`
+  preview are unchanged.
+
 # reactextract 0.6.0.9007 (development)
 
 - Adds `react_hes()`, which returns REACT's linked Hospital Episode Statistics

@@ -174,6 +174,11 @@ archive, its manifest, the exact dictionary checksum and the approval record
 before generating any values. The manifest records the profile, seed and model
 used.
 
+In `v5`, reported pre-existing conditions also depend on age and sex. The
+shape of each gradient comes from public statistics for England, not REACT,
+and each round keeps the profile's prevalence of every condition; see
+[Age and sex gradients for pre-existing conditions](CONDITION_AGE_GRADIENTS.md).
+
 The `v6` preview adds approved participation, eligibility and round-specific
 dependency models, but several of its categorical distributions are currently
 implausible. Use it only to test code against the preview. Its design and

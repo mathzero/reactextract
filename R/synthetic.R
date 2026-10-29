@@ -267,7 +267,10 @@
 #'
 #' The default `"v5"` profile reproduces each round's approved distributions,
 #' questionnaire routing and the reviewed outcome-centred relationships for
-#' REACT-1 PCR and REACT-2 IgG positivity.
+#' REACT-1 PCR and REACT-2 IgG positivity. Reported pre-existing conditions
+#' also vary with age and sex, with gradients taken from public prevalence
+#' statistics for England (not REACT) and each round's approved prevalence
+#' kept. See `CONDITION_AGE_GRADIENTS.md` in the installed package.
 #'
 #' `"v6"` is an experimental participation preview. It adds approved
 #' participation, eligibility and round-specific dependency models, but some
@@ -915,13 +918,17 @@ react_synthetic <- function(profile = react_synthetic_profile(),
     issues[[length(issues) + 1L]] <- generated$issues
   }
   data <- .apply_synthetic_dependencies(data, occurrences, source, dictionary)
+  conditions <- .apply_condition_age_gradients(data, occurrences, source, dictionary)
+  data <- conditions$data
+  issues[[length(issues) + 1L]] <- conditions$issues
   data <- .apply_synthetic_routing(data, occurrences, dictionary)
   data <- .reapply_synthetic_outcomes(data, occurrences, source, dictionary)
   data <- .synchronise_synthetic_age_group(data, occurrences, dictionary)
   list(
     data = data,
     source_object = paste0("synthetic:", round_id),
-    issues = .bind_rows(issues, .empty_issues())
+    issues = .bind_rows(issues, .empty_issues()),
+    condition_summary = conditions$summary
   )
 }
 
@@ -941,6 +948,12 @@ react_synthetic <- function(profile = react_synthetic_profile(),
     .synthetic_dependency_occurrences(dictionary, source, requested_rounds)
   } else {
     dictionary$occurrences[0, , drop = FALSE]
+  }
+  if (!is.null(source) && !.has_participation(source)) {
+    dependency_occurrences <- unique(rbind(
+      dependency_occurrences,
+      .condition_context_occurrences(dictionary, selected, requested_rounds)
+    ))
   }
   if (!is.null(source$profile$eligibility)) {
     needed <- .eligibility_required_occurrences(dictionary, unique(rbind(selected, dependency_occurrences)), source$profile$eligibility, source$profile$response_options)
