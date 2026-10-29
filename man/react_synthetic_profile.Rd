@@ -32,7 +32,10 @@ downloaded at runtime.
 \details{
 The default \code{"v5"} profile reproduces each round's approved distributions,
 questionnaire routing and the reviewed outcome-centred relationships for
-REACT-1 PCR and REACT-2 IgG positivity.
+REACT-1 PCR and REACT-2 IgG positivity. Reported pre-existing conditions
+also vary with age and sex, with gradients taken from public prevalence
+statistics for England (not REACT) and each round's approved prevalence
+kept. See \code{CONDITION_AGE_GRADIENTS.md} in the installed package.
 
 \code{"v6"} is an experimental participation preview. It adds approved
 participation, eligibility and round-specific dependency models, but some

@@ -1,0 +1,2 @@
+"release","sha256","data_origin","disclosure_review","sources","built_by"
+"condition-age-gradients-v1","7d9cbcec9dcfe1c49723010081431dd891192cac51cc41447e299c41a57d8717","public_statistics_only","not_required_no_react_data","hse2019|hse2022|hse2017_cvd|hse2016_kidney_liver|hse2018_asthma|hse2017_18_longstanding|hse2010_respiratory|ndrs2022|apms2023|mhcyp2017","scripts/condition_age_gradients/build.R"

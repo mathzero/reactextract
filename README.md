@@ -397,12 +397,25 @@ to the nearest 5, and the tables passed formal disclosure review.
   | REACT-1 PCR positivity | Age, gender, ethnicity, region, deprivation, economic activity, previous COVID-19 and contact with a confirmed case (all rounds); household size (rounds 1 and 4–19); symptoms (rounds 2–19); key-worker or care role (rounds 2–3 and 5–19); vaccination (rounds 8–19) |
   | REACT-2 IgG positivity | Age, gender, ethnicity, region, deprivation, household size, economic activity and previous COVID-19 (all rounds); key-worker or care role (rounds 2–4); vaccination (rounds 5–6) |
 
+- Age and sex patterns in pre-existing conditions (`health.preexisting.*`).
+  Diabetes, high blood pressure and heart disease, for example, are much more
+  common in older people. **The shape of each pattern comes from published
+  statistics for England, such as the Health Survey for England, not from
+  REACT**; each round keeps its approved overall prevalence of every condition.
+  Conditions tend to occur together, "None of these" is ticked only by people
+  who report no condition, and someone who did not answer the question has the
+  same missing code in every box. Weakened immune system and organ transplant,
+  which have no suitable public source, are equally common at every age. See
+  [`inst/CONDITION_AGE_GRADIENTS.md`](inst/CONDITION_AGE_GRADIENTS.md) for the
+  sources, figures and method.
+
 **Not captured**
 
-- **Other relationships between variables.** Apart from the outcome
-  relationships above, variables are generated independently. For example, age
-  and smoking are unrelated, so a table comparing groups on any other outcome
-  shows only chance differences.
+- **Other relationships between variables.** Apart from the relationships
+  above, variables are generated independently. For example, age and smoking
+  are unrelated, and pre-existing conditions are unrelated to PCR or antibody
+  results, so a table comparing groups on any other outcome shows only chance
+  differences.
 - **Follow-up of the same people.** Every row is a different person, even
   across rounds.
 - **Free text.** Write-in answers are replaced by the phrase `Synthetic response`.
