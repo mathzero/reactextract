@@ -31,7 +31,10 @@ react_q <- function(id, column) {
   as_num(unlist(x[1, c("p05", "p25", "p50", "p75", "p95")]))
 }
 
-profile <- .hes_profile()
+# a rebuilt profile is validated before its approval is recorded, so load it
+# directly rather than through .hes_profile(), which requires the approval
+profile <- readRDS("inst/extdata/hes-profile.rds")
+assign("hes_profile", profile, envir = .reactextract_env)
 src <- react_synthetic(n_per_round = 1000L, seed = 20261029L)
 res <- react_extract(src, families = "people-households/demographics", progress = FALSE)
 started <- Sys.time()

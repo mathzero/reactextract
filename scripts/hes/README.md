@@ -9,10 +9,11 @@ stay on the developer's machine: only the built profile is committed.
 sh scripts/hes/00_download_sources.sh   # public files into scripts/hes/sources/ (git-ignored)
 REACT_HES_AGGREGATES=/path/to/schema_profile \
   Rscript --no-init-file scripts/hes/01_build_hes_profile.R
-# pin the printed SHA-256 as .hes_profile_sha256 in R/hes_profile.R and
-# record it in inst/extdata/hes-profile-approval.csv
+# pin the printed SHA-256 as .hes_profile_sha256 in R/hes_profile.R
 REACT_HES_AGGREGATES=/path/to/schema_profile \
   Rscript --no-init-file scripts/hes/02_validate_hes.R   # writes scripts/hes/VALIDATION.md
+# once approved, record the SHA-256 in inst/extdata/hes-profile-approval.csv
+# with status formally_approved: react_hes() does not load the profile without it
 ```
 
 `--no-init-file` skips the project's renv profile; the scripts need

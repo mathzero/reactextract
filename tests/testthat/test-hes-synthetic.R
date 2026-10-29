@@ -124,3 +124,9 @@ test_that("outpatient courses start with a first attendance", {
   expect_true(all(op$DIAG_4_01[op$NODIAGS == 0] == "R69X"))
   expect_true(all(op$OPERTN_01[op$NOPROCS == 0] == "-"))
 })
+
+test_that("the HES profile is loaded only with its approval record", {
+  approval <- .read_literal_csv(system.file("extdata", "hes-profile-approval.csv", package = "reactextract"))
+  expect_identical(approval$approval_status, "formally_approved")
+  expect_identical(approval$profile_sha256, .hes_profile_sha256)
+})

@@ -14,6 +14,14 @@
     if (!nzchar(path) || !identical(.sha256_file(path), .hes_profile_sha256)) {
       stop("HES profile checksum mismatch.", call. = FALSE)
     }
+    approval_path <- system.file("extdata", "hes-profile-approval.csv", package = "reactextract")
+    approval <- if (nzchar(approval_path)) .read_literal_csv(approval_path) else data.frame()
+    if (nrow(approval) != 1L ||
+        !all(c("profile_sha256", "approval_status") %in% names(approval)) ||
+        approval$approval_status[[1L]] != "formally_approved" ||
+        approval$profile_sha256[[1L]] != .hes_profile_sha256) {
+      stop("The bundled HES profile approval record is invalid.", call. = FALSE)
+    }
     .reactextract_env$hes_profile <- readRDS(path)
   }
   .reactextract_env$hes_profile

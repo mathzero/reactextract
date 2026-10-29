@@ -7,8 +7,9 @@
   with diagnoses and procedures by age and sex from national HES statistics.
   With `react_oracle()` it queries the real `NHSE_HES_*` tables for the
   participants' `SUBJECT_ID`s. The profile (`hes-profile-v1`) is
-  checksum-pinned and awaits owner approval. See `inst/HES_SYNTHETIC.md`; the
-  build scripts are in `scripts/hes/`.
+  checksum-pinned and formally approved (29 October 2026); it is not loaded
+  without its approval record. See `inst/HES_SYNTHETIC.md`; the build scripts
+  are in `scripts/hes/`.
 - Lowers the minimum R version from 4.4.0 to 4.1.0, so the package installs on
   older R installations such as university HPC environments. No code needed
   R 4.4; the earlier floor dated from the original pin to R 4.4.x. CI now also
