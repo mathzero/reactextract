@@ -357,6 +357,25 @@ cleaning rules are described in the [advanced guide](inst/ADVANCED_GUIDE.md),
 and installation inside the secure environment in the
 [enclave installation guide](inst/ENCLAVE_INSTALL.md).
 
+## Linked hospital records (HES)
+
+`react_hes()` returns the Hospital Episode Statistics linked to REACT
+participants: admitted patient care (one row per episode) and outpatients (one
+row per appointment), April 2015 to March 2023. As with `react_extract()`, it
+gives synthetic records from `react_synthetic()` and the real tables from
+`react_oracle()`, with the same columns and types:
+
+```r
+hes <- react_hes(source, result)
+apc <- hes$NHSE_HES_ADMITTED_PATIENTS
+op  <- hes$NHSE_HES_OUTPATIENTS
+```
+
+Synthetic records follow REACT's linked HES for admissions per person, ages,
+calendar trends and COVID-19 admissions. Diagnoses and procedures depend on age
+and sex. See [`inst/HES_SYNTHETIC.md`](inst/HES_SYNTHETIC.md) for what is and
+is not captured.
+
 ## What the synthetic data capture
 
 Synthetic records are generated round by round from the approved
@@ -408,5 +427,7 @@ to the nearest 5, and the tables passed formal disclosure review.
 ## Licences
 
 Package code is MIT licensed. The bundled REACT dictionary metadata is licensed
-CC BY 4.0. To cite the REACT data dictionary, see
+CC BY 4.0. The HES profile contains public sector information licensed under
+the Open Government Licence v3.0 (NHS England artificial HES and HES 2023-24
+statistics). To cite the REACT data dictionary, see
 [How to cite](https://mathzero.github.io/react_wiki/cite.html) on the wiki.

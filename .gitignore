@@ -22,3 +22,6 @@ CLAUDE.md
 CLAUDE.local.md
 .claude/
 .mcp.json
+
+# HES profile build: public downloads (fetch with scripts/hes/00_download_sources.sh)
+scripts/hes/sources/
