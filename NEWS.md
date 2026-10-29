@@ -1,5 +1,9 @@
 # reactextract 0.6.0.9006 (development)
 
+- Lowers the minimum R version from 4.4.0 to 4.1.0, so the package installs on
+  older R installations such as university HPC environments. No code needed
+  R 4.4; the earlier floor dated from the original pin to R 4.4.x. CI now also
+  checks R 4.1.3.
 - Adds `react_search()`, a keyword search over concept names, raw field names
   and question wording. It returns the concept IDs to pass to `react_extract()`,
   with each concept's raw fields, rounds and typical question.

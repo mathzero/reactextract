@@ -10,7 +10,7 @@ package version.
 ```r
 install.packages("reactextract_<version>.tar.gz", repos = NULL, type = "source")
 
-stopifnot(getRversion() >= "4.4.0")
+stopifnot(getRversion() >= "4.1.0")
 stopifnot(requireNamespace("DBI", quietly = TRUE))
 stopifnot(requireNamespace("odbc", quietly = TRUE))
 
@@ -20,9 +20,9 @@ nrow(react_families())
 react_harmonisation_notes(open = FALSE)
 ```
 
-R 4.4.0 is the minimum, not an exact requirement, and there is no artificial
-upper-version limit. CI checks R 4.4.1, R 4.5.1 and the current R release
-(currently R 4.6.x). The R version in `renv.lock` records the environment used
+R 4.1.0 is the minimum, not an exact requirement, and there is no artificial
+upper-version limit. CI checks R 4.1.3, R 4.4.1, R 4.5.1 and the current R
+release (currently R 4.6.x). The R version in `renv.lock` records the environment used
 to lock build dependencies and does not impose an upper runtime limit.
 
 The offline bundle includes an `enclave` directory. Copy

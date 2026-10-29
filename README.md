@@ -80,7 +80,7 @@ also gives the number of tests in each round.
 
 ## Installation
 
-You need R 4.4.0 or later. The package uses only base R, so it installs no other
+You need R 4.1.0 or later. The package uses only base R, so it installs no other
 packages. Install it from GitHub:
 
 ```r

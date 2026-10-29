@@ -15,7 +15,7 @@ License: MIT + file LICENSE
 URL: https://github.com/mathzero/reactextract
 BugReports: https://github.com/mathzero/reactextract/issues
 Depends:
-    R (>= 4.4.0)
+    R (>= 4.1.0)
 Suggests:
     arrow,
     DBI,
