@@ -1,3 +1,19 @@
+# reactextract 0.6.0.9009 (development)
+
+- Documents how the synthetic relationships combine. Synthetic hospital records
+  depend only on age and sex, so test results, symptoms and reported conditions
+  have no effect on them. Because conditions, outcomes and hospital records all
+  depend on age, crude comparisons between them differ (people reporting
+  diabetes have more admissions) until age and sex are allowed for. The README,
+  `inst/HES_SYNTHETIC.md` and `inst/CONDITION_AGE_GRADIENTS.md` give an
+  example, and the README no longer says conditions and test results show only
+  chance differences.
+- The advanced guide covers `react_hes()` with real data and the HES profile;
+  the enclave installation guide adds a one-off check that real HES column
+  types match the synthetic tables. The README and advanced guide credit the
+  Open Government Licence sources of the condition gradients, and the package
+  description mentions linked HES.
+
 # reactextract 0.6.0.9008 (development)
 
 - Synthetic pre-existing conditions (`health.preexisting.*`) now depend on age

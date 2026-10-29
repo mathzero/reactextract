@@ -52,6 +52,11 @@ Codes use HES formats:
 
 ## What the synthetic records capture
 
+Each person's records depend on their age and sex in the REACT data, and on
+nothing else in it. Their age is taken to apply on 1 April 2021 (or on
+`age_date`, if you give one), so they age through the records. Their REACT
+ethnic group fills `ETHNOS`.
+
 - **Who uses hospitals, and how much.** Admission and appointment rates depend
   on age and sex. Some people use hospitals far more than others, and people
   admitted more often also have more outpatient appointments. Calibrated so
@@ -77,8 +82,12 @@ Codes use HES formats:
   HRG, geography and similar columns take plausible values chosen
   independently. Residence fields stay the same for a person. Provider and
   specialty stay the same within a spell or outpatient course.
-- **No link to REACT test results.** A positive synthetic swab does not make
-  a later COVID-19 admission more likely.
+- **No link to the rest of the REACT data.** Test results, symptoms,
+  pre-existing conditions, recent hospital attendance (`HOSP01`–`HOSP05`) and
+  vaccination have no effect on a person's records. A positive synthetic swab
+  does not make a later COVID-19 admission more likely, and someone who
+  reported diabetes is no more likely to have a diabetes code than others of
+  the same age and sex. Ethnicity affects only `ETHNOS`.
 - **No deaths outside hospital**, and no mortality register.
 - **No GP, A&E or critical care records** (planned).
 - **Some differences from REACT's aggregates:**
@@ -87,6 +96,22 @@ Codes use HES formats:
   - outpatient appointments are 20.8 per person, against 22.0.
 
   See `scripts/hes/VALIDATION.md` in the source repository.
+
+## Differences that come only from age and sex
+
+Synthetic pre-existing conditions, and PCR and antibody results, also depend
+on age (see `CONDITION_AGE_GRADIENTS.md`). So crude comparisons between survey
+answers and hospital records show differences that disappear once age and sex
+are allowed for. In 50,000 synthetic people in each of REACT-1 rounds 8 and
+17, people who reported diabetes, against those who did not:
+
+| | Crude | Adjusted for age group and sex |
+|---|---|---|
+| Had an admission in 2021 | 28% against 22% (odds ratio 1.4) | odds ratio close to 1 |
+| Had a diabetes code (E10–E14) | 26% against 17% (odds ratio 1.8) | odds ratio close to 1 |
+
+Use this to practise adjusting for confounding. The figures describe the
+generator, not REACT participants.
 
 ## Sources
 

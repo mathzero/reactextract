@@ -62,13 +62,48 @@ The offline bundle also includes `DERIVED_VARIABLES.md`. It documents the
 `react_derive_*()` functions for adding established PCR positivity
 (`estbinres`), REACT-2 IgG positivity, IMD quintile, fixed age groups,
 household size and BMI to a wide result. These are documented analysis choices
-and are not applied automatically by the package.
+and are not applied automatically by the package. `HES_SYNTHETIC.md` describes
+the linked hospital records from `react_hes()`, and
+`CONDITION_AGE_GRADIENTS.md` the age and sex gradients for synthetic
+pre-existing conditions.
 
 The acceptance runner does not save the row-level smoke result. Keep even its
 aggregate report inside the enclave unless it has passed the normal disclosure
 review process. Later extraction results must never be copied out of the enclave.
 Only aggregate profiles prepared with `react_prepare_profile_export()` should be
 submitted for disclosure review.
+
+## Linked HES column types
+
+Synthetic HES tables assume that odbc returns Oracle `DATE` columns as
+`POSIXct` and `NUMBER` columns as double. Check this once, after acceptance
+passes, by comparing the column classes of a few real records with synthetic
+ones:
+
+```r
+source <- react_oracle(con)
+people <- react_extract(source, families = "people-households/demographics",
+                        rounds = "REACT1_R08")
+real <- react_hes(source, people$data[1:200, "SUBJECT_ID", drop = FALSE])
+
+synthetic_source <- react_synthetic(n_per_round = c(REACT1_R08 = 200L), seed = 1L)
+synthetic <- react_hes(synthetic_source, react_extract(
+  synthetic_source, families = "people-households/demographics"))
+
+first_class <- function(table) vapply(table, function(x) class(x)[1], "")
+for (name in names(real)) {
+  r <- first_class(real[[name]])
+  s <- first_class(synthetic[[name]])
+  stopifnot(identical(names(r), names(s)))
+  print(data.frame(column = names(r), real = r, synthetic = s)[r != s, ],
+        row.names = FALSE)
+}
+```
+
+An empty table for each HES table means the types match. Otherwise, report the
+printed column names and classes as an issue. They hold no values, but take
+them out only through the usual output checking. Keep `real` and `people`
+inside the enclave, as with any extraction.
 
 ## Synthetic-data profile
 

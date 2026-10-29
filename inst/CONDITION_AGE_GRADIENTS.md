@@ -112,8 +112,11 @@ separate extractions and `react_hes()`.
 - Small survey samples make some shapes noisy. Liver disease and psychiatric
   disorder, for example, peak at 55–64 and 35–44 and fall at older ages.
 - Conditions are related to age, sex and each other, but not to the outcomes
-  (PCR or antibody positivity) or to other variables such as smoking,
-  deprivation, ethnicity or BMI.
+  (PCR or antibody positivity), to synthetic hospital records from
+  `react_hes()`, or to other variables such as smoking, deprivation, ethnicity
+  or BMI. Because the outcomes and hospital records also depend on age, crude
+  comparisons with them show differences that disappear once age and sex are
+  allowed for (see `HES_SYNTHETIC.md`).
 - The shared tendency *z* is a modelling device chosen to keep the profile's
   "None of these" share. It is not estimated from data on which conditions occur
   together, and it gives every pair of conditions the same kind of association.

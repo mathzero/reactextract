@@ -1,14 +1,16 @@
 Package: reactextract
 Title: Synthetic and Real REACT Study Data with One Extraction Interface
-Version: 0.6.0.9008
+Version: 0.6.0.9009
 Authors@R: person("mathzero", email = "mathzero@users.noreply.github.com", role = c("aut", "cre"))
 Description: Generates fictional, disclosure-safe REACT-1 and REACT-2 survey
     data with the same variables, coding, questionnaire routing and cleaning as
     the real study data, from a checksum-pinned, disclosure-approved aggregate
-    profile. Researchers and students can learn the data and develop analysis
-    code outside the secure environment. Inside it, the same extraction
-    interface reads the real data from caller-managed Oracle connections or
-    round files using a pinned, reviewed REACT metadata dictionary. Exact source
+    profile. It also generates fictional linked Hospital Episode Statistics for
+    the synthetic participants. Researchers and students can learn the data and
+    develop analysis code outside the secure environment. Inside it, the same
+    extraction interface reads the real data from caller-managed Oracle
+    connections or round files using a pinned, reviewed REACT metadata
+    dictionary, and the real linked hospital records from Oracle. Exact source
     values are retained; approved transforms take precedence and other reviewed
     concepts use transparent source-preserving coding.
 License: MIT + file LICENSE

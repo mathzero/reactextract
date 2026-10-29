@@ -7,6 +7,12 @@ whose outcome-centred relationships for PCR and IgG positivity are described in
 the README. Some `v6` categorical distributions are currently implausible, so use
 it only to test code against the preview.
 
+The age and sex gradients for pre-existing conditions
+([CONDITION_AGE_GRADIENTS.md](CONDITION_AGE_GRADIENTS.md)) apply to `v5` only;
+in `v6`, conditions stay independent of age. Synthetic hospital records from
+`react_hes()` ([HES_SYNTHETIC.md](HES_SYNTHETIC.md)) depend only on each
+person's age and sex, whichever profile generated them.
+
 The publications below motivate the choice of relationships. The generator does
 **not** copy published odds ratios or reproduce the papers' analyses. It uses
 separately fitted, disclosure-approved round-specific models and protected
