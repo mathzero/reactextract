@@ -1,6 +1,6 @@
 Package: reactextract
 Title: Synthetic and Real REACT Study Data with One Extraction Interface
-Version: 0.6.0.9006
+Version: 0.6.0.9007
 Authors@R: person("mathzero", email = "mathzero@users.noreply.github.com", role = c("aut", "cre"))
 Description: Generates fictional, disclosure-safe REACT-1 and REACT-2 survey
     data with the same variables, coding, questionnaire routing and cleaning as
