@@ -373,8 +373,10 @@ op  <- hes$NHSE_HES_OUTPATIENTS
 
 Synthetic records follow REACT's linked HES for admissions per person, ages,
 calendar trends and COVID-19 admissions. Diagnoses and procedures depend on age
-and sex. See [`inst/HES_SYNTHETIC.md`](inst/HES_SYNTHETIC.md) for what is and
-is not captured.
+and sex. A person's records depend only on their age and sex: their synthetic
+test results, symptoms and reported conditions have no effect. See
+[`inst/HES_SYNTHETIC.md`](inst/HES_SYNTHETIC.md) for what is and is not
+captured.
 
 ## What the synthetic data capture
 
@@ -408,14 +410,17 @@ to the nearest 5, and the tables passed formal disclosure review.
   which have no suitable public source, are equally common at every age. See
   [`inst/CONDITION_AGE_GRADIENTS.md`](inst/CONDITION_AGE_GRADIENTS.md) for the
   sources, figures and method.
+- Linked hospital records whose amount and content depend on age and sex; see
+  [Linked hospital records (HES)](#linked-hospital-records-hes).
 
 **Not captured**
 
 - **Other relationships between variables.** Apart from the relationships
   above, variables are generated independently. For example, age and smoking
-  are unrelated, and pre-existing conditions are unrelated to PCR or antibody
-  results, so a table comparing groups on any other outcome shows only chance
-  differences.
+  are unrelated. Pre-existing conditions do not affect PCR or antibody
+  results, and nothing in the survey data affects a person's hospital records
+  except their age and sex. So, once age and sex are allowed for, any other
+  comparison shows only chance differences (see below).
 - **Follow-up of the same people.** Every row is a different person, even
   across rounds.
 - **Free text.** Write-in answers are replaced by the phrase `Synthetic response`.
@@ -427,6 +432,23 @@ to the nearest 5, and the tables passed formal disclosure review.
   contains implausible values; use `IMD_DECILE` instead.
 - **A few labels contain `?`** where the source questionnaire had an apostrophe
   or dash, for example `Can?t tell what the result is`.
+
+**Differences that come only from age and sex**
+
+PCR and antibody results, pre-existing conditions and hospital records all
+depend on age, and some on sex. So crude comparisons between them can show
+differences even though none affects another. In 50,000 synthetic people in
+each of REACT-1 rounds 8 and 17, for example:
+
+| People who reported diabetes, against those who did not | Crude | Adjusted for age group and sex |
+|---|---|---|
+| Had a hospital admission in 2021 | 28% against 22% (odds ratio 1.4) | odds ratio close to 1 |
+| Had a diabetes code (E10–E14) in their HES records | 26% against 17% (odds ratio 1.8) | odds ratio close to 1 |
+
+Crude comparisons with PCR or antibody results can differ in the same way, by
+an amount that depends on each round's age pattern. This is deliberate: age is
+a realistic confounder to practise adjusting for. These figures describe the
+generator, not REACT participants.
 
 ## Getting help
 
@@ -442,5 +464,12 @@ to the nearest 5, and the tables passed formal disclosure review.
 Package code is MIT licensed. The bundled REACT dictionary metadata is licensed
 CC BY 4.0. The HES profile contains public sector information licensed under
 the Open Government Licence v3.0 (NHS England artificial HES and HES 2023-24
-statistics). To cite the REACT data dictionary, see
+statistics). The age and sex gradients for pre-existing conditions use
+statistics published by NHS England and NHS Digital (the Health Survey for
+England, the Adult Psychiatric Morbidity Survey, the Mental Health of Children
+and Young People survey and NDRS cancer prevalence), licensed under the Open
+Government Licence v3.0, except one Health Survey for England 2010 table used
+with attribution; see
+[`inst/CONDITION_AGE_GRADIENTS.md`](inst/CONDITION_AGE_GRADIENTS.md#sources).
+To cite the REACT data dictionary, see
 [How to cite](https://mathzero.github.io/react_wiki/cite.html) on the wiki.

@@ -19,7 +19,8 @@ structure for each:
 
 All three use the same pinned [REACT data wiki](https://mathzero.github.io/react_wiki/)
 dictionary and the same cleaning code, so an analysis usually needs to change
-only its source to move between them.
+only its source to move between them. Linked hospital records from
+`react_hes()` come from the synthetic and database sources only.
 
 ## Extract real data inside the enclave
 
@@ -79,6 +80,31 @@ result <- get_analysis_data(react_oracle(con))
 
 Code written against `result$data`, `result$raw_data` or the supporting tables
 keeps working because their structure is identical.
+
+## Linked hospital records inside the enclave
+
+`react_hes()` takes the same source. With `react_oracle(con)`, it queries
+`NHSE_HES_ADMITTED_PATIENTS` and `NHSE_HES_OUTPATIENTS` for the participants'
+`SUBJECT_ID`s, 1,000 at a time:
+
+```r
+source <- react_oracle(con)
+people <- react_extract(source, families = "people-households/demographics",
+                        rounds = "REACT1_R08")
+hes <- react_hes(source, people, tables = "apc",
+                 columns = c("ADMIDATE", "DISDATE", "ADMIMETH", "DIAG_4_01"))
+```
+
+`people` is an extraction result or any data frame with a `SUBJECT_ID` column.
+Only whole-number IDs and column names from the HES schema reach the SQL.
+Fetch only the columns you need: the admitted patient care table has 239
+columns and many rows per person. `SUBJECT_ID` is always returned.
+
+The synthetic tables have the same names, columns and types, assuming odbc
+returns Oracle `DATE` as `POSIXct` and `NUMBER` as double. The
+[enclave installation guide](ENCLAVE_INSTALL.md#linked-hes-column-types) has a
+check to run once. [`HES_SYNTHETIC.md`](HES_SYNTHETIC.md) describes the
+synthetic records.
 
 ## Extract from round files
 
@@ -178,6 +204,17 @@ In `v5`, reported pre-existing conditions also depend on age and sex. The
 shape of each gradient comes from public statistics for England, not REACT,
 and each round keeps the profile's prevalence of every condition; see
 [Age and sex gradients for pre-existing conditions](CONDITION_AGE_GRADIENTS.md).
+The gradients are bundled as the checksum-pinned `condition-age-gradients-v1`
+with a provenance record; being built from public statistics only, they need
+no disclosure approval.
+
+Synthetic hospital records from `react_hes()` come from a separate profile,
+`hes-profile-v1`, built from NHS England's public HES files and aggregates of
+REACT's linked HES. It is checksum-pinned and formally approved (29 October
+2026), and is not loaded without its approval record. A person's records
+depend only on their age and sex, so they are unrelated to synthetic test
+results and conditions except through age and sex; see
+[Linked hospital records](HES_SYNTHETIC.md).
 
 The `v6` preview adds approved participation, eligibility and round-specific
 dependency models, but several of its categorical distributions are currently
@@ -206,3 +243,10 @@ retains its attribution and checksums. The dictionary, concept links,
 harmonisation rules and questionnaire routing are maintained in the
 [REACT data wiki](https://mathzero.github.io/react_wiki/) and included here as a
 pinned release rather than duplicated as separate scientific decisions.
+
+The HES profile and the condition gradients contain public sector information
+from NHS England and NHS Digital, licensed under the
+[Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+The one exception, a Health Survey for England 2010 table used with
+attribution, is explained in the
+[condition gradient sources](CONDITION_AGE_GRADIENTS.md#sources).

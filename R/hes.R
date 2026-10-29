@@ -24,7 +24,10 @@
 #' and sex, calendar trends including COVID-19 admissions, spells of one or
 #' more episodes, day cases, length of stay, in-hospital deaths, diagnoses and
 #' procedures by age, sex and admission type, and outpatient courses. Other
-#' columns take plausible values independently of each other. See
+#' columns take plausible values independently of each other. A person's
+#' records depend only on their age and sex: synthetic test results, symptoms
+#' and reported conditions have no effect, though crude comparisons with them
+#' differ through age. See
 #' `inst/HES_SYNTHETIC.md` for what is and is not captured. **Synthetic data
 #' are for learning and writing code, not for findings.**
 #'
