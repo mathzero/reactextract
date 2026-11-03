@@ -1,4 +1,4 @@
-# Clinical cohort inventory: enclave run kit (clinical-inventory-v1)
+# Clinical cohort inventory: enclave run kit (clinical-inventory-v1.1)
 
 This kit describes every dataset held for the REACT Clinical Study, so that
 code, and later synthetic data, can be developed outside the enclave. It reads
@@ -10,6 +10,46 @@ structure), both protected for output checking.
 
 It reads files only. It does not connect to the database, change any file it
 reads, or write row-level data.
+
+## Version 1.1: the supplement run
+
+The first enclave run (2 November 2026) profiled 16 of its 23 sources. Seven
+stopped on kit bugs, none of them caused by the data:
+
+- `wrangled` and `master` stopped on Windows-1252 characters in free text
+  (`add_comm`). Text that is not valid UTF-8 is now converted from
+  Windows-1252 on reading, and the count of converted values is reported per
+  column. Each column, table and cross-table step is now profiled on its own,
+  so an error in one is recorded in `00_source_issues.csv` and the rest still
+  run (status `partial`).
+- `proteomics` stopped because columns were guessed. `sources.R` now declares
+  each table's feature, value and sample columns. Alamar NPQ and LC-MS values
+  are profiled both raw and normalised, and `df_allplats` is profiled per
+  platform.
+- `metabolomics_rpos` and `_rneg` stopped on the CSVs' unnamed first column.
+  Names are now repaired as `read_csv()` repairs them (`...1`).
+- `transcriptomics_t0` and `_t1` could not link samples to people: the
+  matrices' columns are BioSample names. The manifests now map them to
+  sample barcodes, as `code/07` does.
+
+v1.1 also adds two sources: the untargeted XCMS metabolomics table, which has
+no sample IDs and is profiled without linking samples to people, and the
+APOE4 carrier file. It also fixes four smaller problems:
+
+- the folder listing gave every collapsed folder the first folder's count;
+- `evbirth` and `numbirth` were withheld as if they were dates of birth;
+- dates stored as text are now profiled as dates;
+- placeholder dates (1582-10-14, the SPSS zero date, and similar) are now
+  counted and left out of date quantiles.
+
+**Run v1.1 in the same folder as v1**, or set `REACT_CI_INTERNAL` to the first
+run's `clinical-inventory-INTERNAL` folder. `01_run_inventory.R` profiles
+only the nine sources in `ci_supplement_sources` and keeps the first run's
+checkpoints for the other 16. `02_prepare_export.R` writes
+`clinical-inventory-v1.1-supplement-candidate`, which holds those nine
+sources only. Their rows replace the same sources in the first candidate.
+For a full run, use `ci_run(sources = "all")` and
+`ci_prepare_export(sources = NULL)`.
 
 ## Before running
 
@@ -39,8 +79,8 @@ before the real run, to confirm that the kit works with the enclave's R.
 
 ```r
 Sys.setenv(REACT_GELC_PROJECT = "D:/path/to/react_ge_lc_wrangle")  # holds subject_ids_main_cohort.rds
-source("01_run_inventory.R")    # reads each source in turn; aggregates go to clinical-inventory-INTERNAL
-source("02_prepare_export.R")   # writes clinical-inventory-v1-candidate
+source("01_run_inventory.R")    # profiles the nine v1.1 sources; aggregates go to clinical-inventory-INTERNAL
+source("02_prepare_export.R")   # writes clinical-inventory-v1.1-supplement-candidate
 ```
 
 `REACT_SAVED_ROOT` (default `D:/saved_objects`) and `REACT_DATA_ROOT` (default
@@ -49,8 +89,12 @@ source("02_prepare_export.R")   # writes clinical-inventory-v1-candidate
 `cohort_availability_sets.rds`, and `01_context.csv` records which route was used.
 
 Each source is saved as soon as it is done. If the run stops, start a new
-session and run `01_run_inventory.R` again: sources whose input files have not
-changed (same size and modification time) are reused. The expression matrices
+session and run `ci_run()` again: a source is reused when its input files
+have not changed (same size and modification time) and its last run
+finished. Sources that failed, wholly or in part, are profiled again.
+(`01_run_inventory.R` always reprofiles its nine sources.) The first run took
+about two hours, 76 minutes of it for `linkage_ids`. The nine-source
+supplement should take about an hour. The expression matrices
 (`tx_baseline.rds`, `tx_recall.rds`) need the most memory: about twice the size
 of the loaded file, since R reads each RDS whole. They are read one at a time,
 and only genes non-zero in at least 10% of samples are profiled. On invented
@@ -67,11 +111,13 @@ peak memory of about 6.5 GB.
 | `sample_lookup`, `availability_sets`, `provenance` | Stage 01–02 support files in `metadata/` |
 | `proteomics` | `REACT_SAVED_ROOT/ge_lc/ge_lc_omics_objects/olink_alamar_lcms_combined.rds` (Olink, Alamar, LC-MS) |
 | `metabolomics_rpos`, `metabolomics_rneg` | PeakPantheR `combinedData.csv` files (2024-12-13 release) |
+| `metabolomics_xcms` | `metabolomics/metabolomics_lc_ms/XCMS_metabolomics_intensity_data_2_noSampleID_CL.csv` (no sample IDs) |
 | `lipids` | `Signaling-Lipids-Analysis/lipids_with_subject_id.rds`, written by stage 02 |
 | `transcriptomics_t0`, `_t1` | `tx_baseline.rds`, `tx_recall.rds` (tximport lists) |
 | `transcriptomics_manifests` | `transcriptomics/manifests/*.xlsx` |
 | `autoantibodies` | `autoantibodies/REACT LC Aab data.xlsx`, sheets 4 (controls) and 5 (cases) |
 | `genomics_samples` | `genomics/REACT_PGEN/*.psam` and the sample-well lookup (sample lists only) |
+| `apoe4` | `genomics/APOE4/apoe4_carrier.csv`, linked through the sample-well lookup, cohort members only |
 | `followup_2022`, `followup_2025` | Later questionnaires, cohort members only |
 | `cognitron_1`, `cognitron_2` | Cognitron files in `cog_data/`, cohort members only |
 | `nhs_hes`, `nhs_gp` | `gelc_hes_data.rds`, `gelc_gpes_data.rds`, cohort members only |
@@ -83,9 +129,10 @@ pipeline doesn't read, and records the R version and installed packages.
 
 ## What comes back
 
-`clinical-inventory-v1-candidate/` holds:
+The candidate folder (`clinical-inventory-v1.1-supplement-candidate/` for the
+v1.1 run) holds:
 
-- `inventory/`: sources and their status, the nested structure, every table
+- `inventory/`: sources and their status, steps that failed, the nested structure, every table
   and column (type, role, completeness), the folder listing, the R environment
   and pipeline provenance. The output checker can review and release this
   folder on its own.

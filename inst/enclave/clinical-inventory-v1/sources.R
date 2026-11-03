@@ -3,16 +3,23 @@
 # in the clinical wrangling project (hub decision H04). Each entry names a
 # reader in inventory.R; optional fields:
 #   map_via      how sample or project IDs reach subject_id: "lookup" (assay
-#                barcode, ge_lc_sample_lookup.rds) or "identifiers"
-#                (SUBJECT_IDENTIFIERS_V project_identifier)
+#                barcode, ge_lc_sample_lookup.rds), "identifiers"
+#                (SUBJECT_IDENTIFIERS_V project_identifier), "genomics"
+#                (genotyping sample well or LPID) or "auto" (whichever column
+#                and map link most rows)
 #   id_col       column holding that ID when the table has no subject_id
 #   sample_col   omics sample key; feature_from: first feature column
+#   layouts      per table of an omics list: feature, value (each value
+#                column is profiled as its own platform), sample, split, or
+#                type = "wide"
 #   cohort_only  profile only rows that map to the main cohort (sources that
 #                cover REACT participants outside the Clinical Study)
+#   na           strings read as missing from a CSV ("" as well, as read_csv())
 ci_sources <- function(s) {
   meta <- file.path(s$data_root, "metadata")
   omics <- file.path(s$saved_root, "ge_lc", "ge_lc_omics_objects")
   metab <- file.path(s$data_root, "metabolomics", "metabolomics_lc_ms")
+  tx_manifests <- file.path(s$data_root, "transcriptomics", "manifests")
   metab_file <- function(mode) {
     run <- paste0("REACT_LCMS_P_", mode, "_PeakPantheR_2024-12-13")
     file.path(metab, run, run, paste0("REACT_LCMS_P_", mode, "_PeakPantheR_combinedData.csv"))
@@ -32,28 +39,45 @@ ci_sources <- function(s) {
         cohort = file.path(meta, "cohort_provenance.rds"))),
 
     # omics
+    # Olink, Alamar and LC-MS long tables hold one row per sample and protein;
+    # df_allplats stacks the three, so it is profiled per platform. Where a
+    # normalised value exists, both values are profiled.
     list(id = "proteomics", group = "omics", reader = "omics_list",
-      path = file.path(omics, "olink_alamar_lcms_combined.rds"), map_via = "lookup"),
+      path = file.path(omics, "olink_alamar_lcms_combined.rds"), map_via = "lookup",
+      layouts = list(
+        allplats = list(feature = "protein_cleaned", value = "value", sample = "sample_id", split = "platform"),
+        olink = list(feature = "olink_id", value = "npx", sample = "sample_id"),
+        alamar = list(feature = "protein_cleaned", value = c("npq", "npq_normalised"), sample = "sample_id"),
+        lcms = list(type = "wide", sample = "sample_name"),
+        lcms_long = list(feature = "protein_cleaned", value = c("value", "value_normalised"),
+          sample = c("sample_id", "sample_name")))),
     list(id = "metabolomics_rpos", group = "omics", reader = "omics_csv", path = metab_file("RPOS"),
-      sample_col = "Sample ID", feature_from = 23L, map_via = "lookup"),
+      sample_col = "Sample ID", feature_from = 23L, map_via = "lookup", na = c("", "NA")),
     list(id = "metabolomics_rneg", group = "omics", reader = "omics_csv", path = metab_file("RNEG"),
-      sample_col = "Sample ID", feature_from = 23L, map_via = "lookup"),
+      sample_col = "Sample ID", feature_from = 23L, map_via = "lookup", na = c("", "NA")),
+    # untargeted features without sample IDs: profiled unlinked to people
+    list(id = "metabolomics_xcms", group = "omics", reader = "xcms",
+      path = file.path(metab, "XCMS_metabolomics_intensity_data_2_noSampleID_CL.csv"), na = c("", "NA")),
     list(id = "lipids", group = "omics", reader = "omics_rds",
       path = file.path(s$data_root, "Signaling-Lipids-Analysis", "lipids_with_subject_id.rds"),
       sample_col = "Sample.Name", map_via = "identifiers"),
+    # expression matrix columns are BioSample names: the manifests map them to barcodes
     list(id = "transcriptomics_t0", group = "omics", reader = "tximport",
-      path = file.path(omics, "tx_baseline.rds"), map_via = "lookup"),
+      path = file.path(omics, "tx_baseline.rds"), map_via = "lookup", manifests = tx_manifests, visit = "t0"),
     list(id = "transcriptomics_t1", group = "omics", reader = "tximport",
-      path = file.path(omics, "tx_recall.rds"), map_via = "lookup"),
+      path = file.path(omics, "tx_recall.rds"), map_via = "lookup", manifests = tx_manifests, visit = "t1"),
     list(id = "transcriptomics_manifests", group = "omics", reader = "xlsx_dir",
-      path = file.path(s$data_root, "transcriptomics", "manifests"), id_col = "Patient.ID", map_via = "lookup"),
+      path = tx_manifests, id_col = "Patient.ID", map_via = "lookup"),
     list(id = "autoantibodies", group = "omics", reader = "autoantibodies",
       path = file.path(s$data_root, "autoantibodies", "REACT LC Aab data.xlsx"),
       sheets = c(controls = 4L, cases = 5L), header_in_first_row = "controls",
       id_col = "sample_id", map_via = "identifiers"),
     list(id = "genomics_samples", group = "omics", reader = "psam_dir",
       path = file.path(s$data_root, "genomics", "REACT_PGEN"),
-      lookup = file.path(s$data_root, "genomics", "genomics", "data", "REACT_Covid19_DNA_Sample_LPIDs-1.tsv")),
+      lookup = ci_genomics_lookup(s)),
+    list(id = "apoe4", group = "omics", reader = "csv",
+      path = file.path(s$data_root, "genomics", "APOE4", "apoe4_carrier.csv"), map_via = "auto",
+      cohort_only = TRUE, na = c("", "NA")),
 
     # later questionnaires and cognition, restricted to cohort members
     list(id = "followup_2022", group = "followup", reader = "rds_tree",
@@ -82,6 +106,16 @@ ci_sources <- function(s) {
       path = file.path(s$saved_root, "ge_lc_invites.rds"))
   )
 }
+
+# genotyping sample well and LPID to DNA sample barcode
+ci_genomics_lookup <- function(s) {
+  file.path(s$data_root, "genomics", "genomics", "data", "REACT_Covid19_DNA_Sample_LPIDs-1.tsv")
+}
+
+# Sources profiled and exported by the v1.1 supplement: the seven that failed
+# in the first enclave run (2 November 2026) and the two added in v1.1.
+ci_supplement_sources <- c("wrangled", "master", "proteomics", "metabolomics_rpos", "metabolomics_rneg",
+  "metabolomics_xcms", "transcriptomics_t0", "transcriptomics_t1", "apoe4")
 
 # Person-level tables joined on subject_id for cross-domain rank correlations.
 ci_panels <- list(

@@ -3,7 +3,7 @@
 # INTERNAL folder that stays in the enclave. Those aggregates are not yet
 # disclosure-controlled: export.R applies the rules and writes the candidate.
 
-ci_version <- "clinical-inventory-v1"
+ci_version <- "clinical-inventory-v1.1"
 
 ## settings ---------------------------------------------------------------------
 
@@ -28,26 +28,84 @@ ci_id_names <- c("code", "id", "iid", "fid", "uid", "user", "user_code", "barcod
   "sample", "well")
 ci_id_suffix <- "[._ ](id|iid|barcode|passcode|password|identifier)$"
 ci_id_contains <- "(sample[._ ]?name|biosample|sample[._ ]?well|nhs[._ ]?number|subject[._ ]?id)"
-ci_withheld_pattern <- paste0("(dob|birth|postcode|post_code|address|email|phone|mobile|surname|",
-  "forename|first_name|last_name|full_name|lsoa|msoa|gp_practice|ip_address|latitude|longitude)")
-ci_text_pattern <- "(text|comment|specify|describe|free|other)"
+# "birth" alone would also catch evbirth and numbirth (births, not birth dates)
+ci_withheld_pattern <- paste0("(dob|(date|day|month|year|place|country)[._ ]?of[._ ]?birth|",
+  "birth[._ ]?(date|day|month|year|place|country)|(^|[._ ])yob($|[._ ])|postcode|post_code|address|email|",
+  "phone|mobile|surname|forename|first_name|last_name|full_name|lsoa|msoa|gp_practice|ip_address|latitude|longitude)")
+ci_text_pattern <- "(text|comment|(^|[._ ])comms?($|[._ ])|specify|describe|free|other)"
+# dates that stand for "missing": the SPSS and Excel zero dates, HES and other nulls
+ci_placeholder_dates <- as.Date(c("1582-10-14", "1800-01-01", "1899-12-30", "1900-01-01", "9999-12-31"))
 
 ## small helpers -----------------------------------------------------------------
 
 ci_frame <- function(...) data.frame(..., stringsAsFactors = FALSE, check.names = FALSE)
 
-# rbind data frames whose columns differ, filling missing columns with NA
+# rbind data frames whose columns differ, filling missing columns with NA.
+# Columns are joined one at a time: rbind() slows badly with many small frames.
 ci_bind <- function(frames) {
   frames <- Filter(function(x) is.data.frame(x) && nrow(x) > 0L, frames)
   if (!length(frames)) return(NULL)
   cols <- unique(unlist(lapply(frames, names)))
-  frames <- lapply(frames, function(x) {
-    for (col in setdiff(cols, names(x))) x[[col]] <- rep(NA, nrow(x))
-    x[cols]
+  out <- lapply(cols, function(col) ci_concat(lapply(frames, function(x)
+    if (col %in% names(x)) x[[col]] else rep(NA, nrow(x)))))
+  structure(stats::setNames(out, cols), class = "data.frame", row.names = c(NA_integer_, -length(out[[1]])))
+}
+
+ci_concat <- function(parts) {
+  parts <- lapply(parts, function(p) if (is.factor(p)) as.character(p) else p)
+  if (any(vapply(parts, inherits, logical(1), "Date"))) {
+    parts <- lapply(parts, function(p) if (inherits(p, "Date")) as.numeric(p) else rep(NA_real_, length(p)))
+    return(as.Date(unlist(parts, use.names = FALSE), origin = "1970-01-01"))
+  }
+  unlist(parts, use.names = FALSE)
+}
+
+# one-row prefix columns joined to every row of a result; NULL when it is empty
+ci_with <- function(prefix, frame) {
+  if (is.null(frame) || !nrow(frame)) return(NULL)
+  cbind(prefix, frame)
+}
+
+# Run one step; an error is kept as an issue and the source carries on.
+ci_try <- function(res, source, step, expr) {
+  tryCatch(expr, error = function(e) {
+    ci_put(res, "issues", ci_frame(source = source, step = step, message = ci_sanitise(conditionMessage(e))))
+    invisible(NULL)
   })
-  out <- do.call(rbind, frames)
-  rownames(out) <- NULL
-  out
+}
+
+# Text that is not valid UTF-8 (Windows-1252 free text, such as an accented
+# letter typed in Excel) stops nchar(), tolower() and gsub() in a UTF-8 session.
+# Such values are converted from Windows-1252; "ci_recoded" counts them.
+ci_fix_text <- function(x) {
+  if (is.factor(x)) {
+    bad <- !validUTF8(levels(x))
+    if (!any(bad)) return(x)
+    lev <- as.character(ci_fix_text(levels(x)))
+    out <- factor(lev[as.integer(x)], levels = unique(lev))
+    attr(out, "ci_recoded") <- sum(as.integer(x) %in% which(bad))
+    return(out)
+  }
+  if (!is.character(x)) return(x)
+  bad <- which(!is.na(x) & !validUTF8(x))
+  if (!length(bad)) return(x)
+  fixed <- iconv(x[bad], "CP1252", "UTF-8", sub = "?")
+  fixed[is.na(fixed)] <- iconv(x[bad][is.na(fixed)], "latin1", "UTF-8", sub = "?")
+  x[bad] <- fixed
+  attr(x, "ci_recoded") <- length(bad)
+  x
+}
+
+# Blank and repeated column names, repaired as readr does ("...1", "a...3"),
+# so that names match what the pipeline sees with read_csv().
+ci_repair_names <- function(nm) {
+  nm <- as.character(ci_fix_text(as.character(nm)))
+  nm[is.na(nm)] <- ""
+  blank <- !nzchar(nm)
+  nm[blank] <- paste0("...", which(blank))
+  dup <- nm %in% nm[duplicated(nm)]
+  nm[dup] <- paste0(nm[dup], "...", which(dup))
+  nm
 }
 
 # results accumulate per kind in an environment, then bind once per source
@@ -123,7 +181,7 @@ ci_skew <- function(v) {
 
 # make error text safe to keep: no long digit runs or quoted values
 ci_sanitise <- function(x) {
-  x <- gsub("'[^']*'|\"[^\"]*\"", "'...'", x)
+  x <- gsub("'[^']*'|\"[^\"]*\"|‘[^’]*’", "'...'", as.character(ci_fix_text(x)))
   x <- gsub("[0-9]{4,}", "#", x)
   substr(gsub("[\r\n]+", " ", x), 1L, 200L)
 }
@@ -154,9 +212,15 @@ ci_role <- function(x, name) {
   if (is.list(x) || is.complex(x) || is.raw(x)) return("other")
   if (is.logical(x)) return("categorical")
   if (is.factor(x) || is.character(x)) {
-    n_distinct <- length(unique(as.character(x[ok])))
+    v <- as.character(x[ok])
+    n_distinct <- length(unique(v))
+    # dates held as text, as in some questionnaire exports
+    if (grepl("date", k) && mean(!is.na(ci_as_date(utils::head(v, 5000L)))) >= 0.95) return("date")
     if (is.character(x) && grepl(ci_text_pattern, k) && n_distinct > 10L) return("free_text")
-    return(if (n_distinct <= ci_max_levels) "categorical" else "high_cardinality")
+    if (n_distinct <= ci_max_levels) return("categorical")
+    # many distinct values, a quarter or more of them with spaces: free text
+    u <- utils::head(unique(v), 2000L)
+    return(if (mean(grepl("[[:space:]]", u)) >= 0.25) "free_text" else "high_cardinality")
   }
   if (is.numeric(x) || inherits(x, "difftime")) {
     v <- as.numeric(x[ok])
@@ -170,7 +234,8 @@ ci_role <- function(x, name) {
 # shapes (digits to 9, letters to A) only for code-like values without spaces
 ci_shapes <- function(x) {
   v <- as.character(x[!is.na(x)])
-  if (!length(v) || mean(!grepl("\\s", v) & nchar(v) <= 30L) < 0.95) return(NULL)
+  len <- nchar(v, allowNA = TRUE)   # NA for text that is still not valid in this locale
+  if (!length(v) || mean(!grepl("\\s", v) & !is.na(len) & len <= 30L) < 0.95) return(NULL)
   shape <- gsub("[A-Za-z]", "A", gsub("[0-9]", "9", v))
   tab <- sort(table(shape), decreasing = TRUE)
   utils::head(ci_frame(level = names(tab), n_rows = as.numeric(tab)), 10L)
@@ -212,12 +277,16 @@ ci_counts <- function(x, persons = NULL, lev = NULL) {
   ci_frame(level = lev, level_order = seq_along(lev), n_rows = n_rows, n_persons = n_persons)
 }
 
+# Quantiles leave out placeholder dates. n_quantile (the dates they rest on)
+# is used by the export rules and not written, so n minus it cannot reveal a
+# suppressed placeholder count.
 ci_date_summary <- function(d) {
   v <- d[!is.na(d)]
-  q <- if (length(v)) as.Date(stats::quantile(as.numeric(v), ci_probs, names = FALSE, type = 1),
+  real <- v[!v %in% ci_placeholder_dates]
+  q <- if (length(real)) as.Date(stats::quantile(as.numeric(real), ci_probs, names = FALSE, type = 1),
     origin = "1970-01-01") else as.Date(rep(NA_character_, length(ci_probs)))
-  out <- ci_frame(n = length(v), n_before_2019_12 = sum(v < as.Date("2019-12-01")),
-    n_after_run_date = sum(v > Sys.Date()))
+  out <- ci_frame(n = length(v), n_placeholder = length(v) - length(real), n_quantile = length(real),
+    n_before_2019_12 = sum(v < as.Date("2019-12-01")), n_after_run_date = sum(v > Sys.Date()))
   qf <- as.data.frame(as.list(q))
   names(qf) <- ci_qnames(ci_probs)
   cbind(out, qf)
@@ -255,12 +324,18 @@ ci_rows_per_person <- function(persons) {
 
 # Profile one data frame. persons: subject keys per row (found from a
 # subject_id column when NULL). Distributions are skipped for small tables.
+# Each column is profiled on its own, so an error in one is kept as an issue
+# and the rest of the table is still profiled.
 ci_profile_table <- function(res, df, source, table, ctx, persons = NULL, anchored = TRUE,
-                             n_rows_source = NA, skip = character()) {
+                             n_rows_source = NA, skip = character(), person_key = NA_character_) {
   df <- as.data.frame(df, stringsAsFactors = FALSE, optional = TRUE)
+  names(df) <- ci_repair_names(names(df))
   if (is.null(persons)) {
     j <- ci_subject_col(df)
-    if (!is.na(j)) persons <- ci_key(df[[j]])
+    if (!is.na(j)) {
+      persons <- ci_key(df[[j]])
+      person_key <- names(df)[j]
+    }
   }
   has_persons <- !is.null(persons)
   p <- if (has_persons) persons[!is.na(persons)] else character()
@@ -273,7 +348,7 @@ ci_profile_table <- function(res, df, source, table, ctx, persons = NULL, anchor
     person_level = person_level, n_persons = n_persons,
     n_persons_main = if (has_persons && !is.null(ctx$cohort)) length(intersect(unique(p), ctx$cohort)) else NA_real_,
     n_rows_no_person = if (has_persons) sum(is.na(persons)) else NA_real_, profile_level = level),
-    ci_rows_per_person(persons)))
+    ci_rows_per_person(persons), ci_frame(person_key = if (has_persons) person_key else NA_character_)))
   if (level == "full" && has_persons && anchored) {
     anchors <- ci_anchor_values(persons, ctx)
   } else {
@@ -294,16 +369,16 @@ ci_profile_table <- function(res, df, source, table, ctx, persons = NULL, anchor
     anchors <- NULL
   }
   numeric_cols <- list()
-  for (pos in seq_along(df)) {
+  profile_column <- function(pos) {
     name <- names(df)[pos]
-    if (name %in% skip) next
-    x <- tryCatch(ci_as_double(df[[pos]]), error = function(e) NULL)
+    x <- tryCatch(ci_fix_text(ci_as_double(df[[pos]])), error = function(e) NULL)
+    recoded <- if (is.null(x) || is.null(attr(x, "ci_recoded"))) 0 else attr(x, "ci_recoded")
     role <- if (is.null(x)) "other" else tryCatch(ci_role(x, name), error = function(e) "other")
     n_ok <- if (is.null(x) || is.list(x)) NA_real_ else sum(!is.na(x))
     ci_put(res, "columns", ci_frame(source = source, table = table, position = pos, column = name,
       class = class(df[[pos]])[1], role = role, n_nonmissing = n_ok, n_missing = nrow(df) - n_ok,
-      n_distinct = if (is.null(x) || is.list(x)) NA_real_ else length(unique(x[!is.na(x)]))))
-    if (level != "full") next
+      n_distinct = if (is.null(x) || is.list(x)) NA_real_ else length(unique(x[!is.na(x)])), n_recoded = recoded))
+    if (level != "full") return(invisible(NULL))
     stub <- function(sv = "all", st = "all") ci_frame(source = source, table = table, column = name,
       stratum_var = sv, stratum = st)
     if (role %in% c("categorical", "coded_numeric")) {
@@ -311,7 +386,7 @@ ci_profile_table <- function(res, df, source, table, ctx, persons = NULL, anchor
     }
     if (role %in% c("continuous", "coded_numeric")) {
       ci_put(res, "numeric", cbind(stub(), ci_numeric_row(x)))
-      numeric_cols[[name]] <- as.numeric(x)
+      numeric_cols[[name]] <<- as.numeric(x)
     }
     if (role == "date") {
       d <- ci_as_date(x)
@@ -343,9 +418,15 @@ ci_profile_table <- function(res, df, source, table, ctx, persons = NULL, anchor
         }
       }
     }
+    invisible(NULL)
+  }
+  for (pos in seq_along(df)) {
+    if (names(df)[pos] %in% skip) next
+    ci_try(res, source, paste0(table, ":", names(df)[pos]), profile_column(pos))
   }
   if (level == "full" && person_level && length(numeric_cols) >= 2L) {
-    ci_put(res, "correlations", cbind(ci_frame(source = source, scope = table), ci_correlations(numeric_cols)))
+    ci_try(res, source, paste0(table, ":correlations"), ci_put(res, "correlations",
+      ci_with(ci_frame(source = source, scope = table), ci_correlations(numeric_cols))))
   }
   invisible(list(person_level = person_level, persons = persons))
 }
@@ -397,7 +478,7 @@ ci_panel_correlations <- function(res, source, panel, tables) {
       if (role %in% c("continuous", "coded_numeric")) cols[[paste0(basename(t), ":", name)]] <- as.numeric(x)[i]
     }
   }
-  if (length(cols) >= 2L) ci_put(res, "correlations", cbind(ci_frame(source = source, scope = paste0("panel:", panel)),
+  if (length(cols) >= 2L) ci_put(res, "correlations", ci_with(ci_frame(source = source, scope = paste0("panel:", panel)),
     ci_correlations(cols)))
   invisible(NULL)
 }
@@ -470,19 +551,40 @@ ci_visit <- function(meta, sample_key = NULL) {
 }
 
 ci_map <- function(keys, via, ctx) {
-  lk <- if (identical(via, "lookup")) ctx$sample_lookup else if (identical(via, "identifiers")) ctx$identifiers else NULL
+  lk <- if (identical(via, "lookup")) ctx$sample_lookup else if (identical(via, "identifiers")) ctx$identifiers else
+    if (identical(via, "genomics")) ctx$genomics else NULL
   if (is.null(lk)) return(rep(NA_character_, length(keys)))
   unname(lk[keys])
 }
 
-# subject keys for the rows of a table: subject_id column, else a mapped ID column
+# The column and map that link the most rows to people, if they link at least half.
+ci_auto_persons <- function(df, ctx) {
+  best <- list(persons = NULL, key = NA_character_, hits = 0)
+  for (name in names(df)) {
+    x <- df[[name]]
+    if (!(is.character(x) || is.numeric(x) || is.factor(x))) next
+    k <- ci_key(x)
+    n_ok <- sum(!is.na(k))
+    if (n_ok < ci_min_cell) next
+    for (via in c("lookup", "identifiers", "genomics")) {
+      p <- ci_map(k, via, ctx)
+      hits <- sum(!is.na(p))
+      if (hits > best$hits && hits >= 0.5 * n_ok) best <- list(persons = p, key = paste(name, "via", via), hits = hits)
+    }
+  }
+  best[c("persons", "key")]
+}
+
+# subject keys for the rows of a table: subject_id column, else a mapped ID
+# column, else (map_via = "auto") whichever column links most rows to people
 ci_table_persons <- function(df, src, ctx) {
   j <- ci_subject_col(df)
-  if (!is.na(j)) return(ci_key(df[[j]]))
+  if (!is.na(j)) return(list(persons = ci_key(df[[j]]), key = names(df)[j]))
+  if (identical(src$map_via, "auto")) return(ci_auto_persons(df, ctx))
   if (!is.null(src$id_col) && src$id_col %in% names(df) && !is.null(src$map_via)) {
-    return(ci_map(ci_key(df[[src$id_col]]), src$map_via, ctx))
+    return(list(persons = ci_map(ci_key(df[[src$id_col]]), src$map_via, ctx), key = paste(src$id_col, "via", src$map_via)))
   }
-  NULL
+  list(persons = NULL, key = NA_character_)
 }
 
 ci_choose_transform <- function(m, transform) {
@@ -576,10 +678,14 @@ ci_visit_stability <- function(mt, meta) {
 
 # mat: samples x features. meta: one row per sample with .subject and .visit
 # plus any sample metadata (plate, batch, run order). Features are profiled on
-# samples mapped to cohort participants when at least 50 are mapped.
+# samples mapped to cohort participants when at least 50 are mapped. When one
+# table gives several platforms (two value columns), its sample metadata are
+# profiled once (profile_samples).
 ci_profile_omics <- function(res, source, platform, mat, meta, ctx, transform = "auto",
                              max_features = ci_omics_max_features, min_share_nonzero = 0,
-                             extra = list(), n_samples_source = nrow(mat)) {
+                             extra = list(), n_samples_source = nrow(mat), profile_samples = TRUE,
+                             samples_table = paste0(platform, "/samples")) {
+  if (!ncol(mat) || !nrow(mat)) stop("no samples or features to profile")
   if (!is.double(mat)) storage.mode(mat) <- "double"
   if (is.null(colnames(mat))) colnames(mat) <- paste0("feature_", seq_len(ncol(mat)))
   mapped <- !is.na(meta$.subject)
@@ -633,96 +739,163 @@ ci_profile_omics <- function(res, source, platform, mat, meta, ctx, transform = 
       if (role %in% c("categorical", "coded_numeric") && length(unique(x[!is.na(x)])) >= 2L) covs[[paste0("meta:", name)]] <- as.character(x)
       if (role == "continuous") covs[[paste0("meta:", name)]] <- as.numeric(x)
     }
-    ci_put(res, "omics_r2", cbind(ci_frame(source = source, platform = platform), ci_r2(lr$scores, covs)))
+    ci_put(res, "omics_r2", ci_with(ci_frame(source = source, platform = platform), ci_r2(lr$scores, covs)))
   }
   stab <- ci_visit_stability(mt[, kept, drop = FALSE], md)
   if (!is.null(stab)) ci_put(res, "omics_visit", cbind(ci_frame(source = source, platform = platform), stab))
   others <- setdiff(names(md), c(".subject", ".visit", ".sample"))
-  if (length(others)) {
-    ci_profile_table(res, md[others], source, paste0(platform, "/samples"), ctx, persons = md$.subject, anchored = FALSE)
+  if (profile_samples && length(others)) {
+    ci_profile_table(res, md[others], source, samples_table, ctx,
+      persons = if (any(!is.na(md$.subject))) md$.subject else NULL, anchored = FALSE)
   }
   invisible(NULL)
 }
 
 ci_metadata_pattern <- paste0("^(subject_id|timepoint|visit|age|sex|gender|batch|plate|run|order|well|position|",
   "date|time|site|panel|qc|lod|dilution|sample|type|status|group|project|study|class|injection|acquired|ethnic)")
+ci_omics_value_names <- c("npx", "npq", "quantified_value", "value", "intensity", "abundance", "concentration", "conc")
+ci_omics_feature_names <- c("protein_cleaned", "assay", "olinkid", "olink_id", "uniprot", "protein", "protein_name",
+  "feature", "target", "target_name", "analyte", "gene", "metabolite", "lipid")
 
-# Long tables (one row per sample and feature, as Olink NPX) are pivoted;
-# wide tables keep one row per sample with features in columns.
-ci_omics_from_table <- function(res, source, platform, df, src, ctx) {
-  df <- as.data.frame(df, stringsAsFactors = FALSE, optional = TRUE)
+# the first candidate column present (ignoring case) that holds any value
+ci_pick_col <- function(df, candidates) {
   nm <- names(df)
-  k <- tolower(nm)
-  value_col <- nm[k %in% c("npx", "quantified_value", "value", "intensity", "abundance", "concentration", "conc")][1]
-  feature_col <- nm[k %in% c("assay", "olinkid", "olink_id", "uniprot", "protein", "protein_name", "feature",
-    "target", "analyte", "gene", "metabolite", "lipid")][1]
-  sample_col <- if (!is.null(src$sample_col) && src$sample_col %in% nm) src$sample_col else
-    nm[gsub("[._ ]", "", k) %in% c("sampleid", "barcode", "samplename", "sample")][1]
-  subj_j <- ci_subject_col(df)
-  if (!is.na(value_col) && !is.na(feature_col)) {
-    # long layout: sample key from the sample column, else subject and visit
-    key <- if (!is.na(sample_col)) ci_key(df[[sample_col]]) else
-      paste(ci_key(df[[subj_j]]), ci_visit(df), sep = "|")
-    feat <- as.character(df[[feature_col]])
-    val <- ci_numeric_tokens(df[[value_col]])
-    samples <- unique(key[!is.na(key)])
-    features <- unique(feat[!is.na(feat)])
-    ok <- !is.na(key) & !is.na(feat) & !is.na(val$value)
-    cell <- (match(feat[ok], features) - 1) * length(samples) + match(key[ok], samples)
-    sums <- rowsum(val$value[ok], cell)
-    cnt <- rowsum(rep(1, sum(ok)), cell)
-    mat <- matrix(NA_real_, length(samples), length(features), dimnames = list(NULL, features))
-    mat[as.numeric(rownames(sums))] <- sums / cnt
-    first <- match(samples, key)
-    # sample metadata: columns constant within sample (checked on a subset)
-    check <- which(key %in% utils::head(samples, 200L))
-    const <- vapply(setdiff(nm, c(value_col, feature_col)), function(col) {
-      v <- df[[col]][check]
-      all(tapply(v, key[check], function(z) length(unique(z)) <= 1L))
-    }, logical(1))
-    meta <- df[first, names(const)[const], drop = FALSE]
-    ci_profile_table(res, df[setdiff(nm, c(value_col, names(const)[const]))], source,
-      paste0(platform, "/long_rows"), ctx, persons = if (is.na(subj_j)) NULL else ci_key(df[[subj_j]]), anchored = FALSE)
-    ci_put(res, "omics_platform_notes", ci_frame(source = source, platform = platform, layout = "long",
-      value_column = value_col, feature_column = feature_col, sample_column = if (is.na(sample_col)) "subject_id|visit" else sample_col,
-      n_duplicate_cells = sum(cnt > 1)))
-    if (!is.null(val$tokens)) ci_put(res, "omics_tokens", ci_frame(source = source, platform = platform,
-      feature = value_col, token = names(val$tokens), n = as.numeric(val$tokens)))
-    sample_key <- if (!is.na(sample_col)) samples else NULL
-  } else {
-    from <- src$feature_from
-    if (!is.null(from) && !is.na(from) && ncol(df) >= from) {
-      fcols <- nm[from:ncol(df)]
-    } else {
-      fcols <- nm[!vapply(nm, ci_is_id_name, logical(1)) & !grepl(ci_metadata_pattern, k) &
-        !grepl(ci_withheld_pattern, k)]
-    }
-    parsed <- lapply(df[fcols], ci_numeric_tokens)
-    numeric_share <- vapply(parsed, function(p) {
-      nn <- sum(!is.na(p$value))
-      nt <- if (is.null(p$tokens)) 0 else sum(p$tokens)
-      if (nn + nt == 0) 0 else nn / (nn + nt)
-    }, numeric(1))
-    fcols <- fcols[numeric_share >= 0.5]
-    if (length(fcols) < 5L) stop("no feature columns recognised")
-    mat <- do.call(cbind, lapply(parsed[fcols], `[[`, "value"))
-    colnames(mat) <- fcols
-    for (f in fcols) if (!is.null(parsed[[f]]$tokens)) ci_put(res, "omics_tokens", ci_frame(source = source,
-      platform = platform, feature = f, token = names(parsed[[f]]$tokens), n = as.numeric(parsed[[f]]$tokens)))
-    meta <- df[setdiff(nm, fcols)]
-    key <- if (!is.na(sample_col)) ci_key(df[[sample_col]]) else NULL
-    sample_key <- key
-    ci_put(res, "omics_platform_notes", ci_frame(source = source, platform = platform, layout = "wide",
-      sample_column = if (is.na(sample_col)) NA_character_ else sample_col, first_feature = fcols[1],
-      n_duplicate_cells = NA_real_))
+  for (cand in candidates) {
+    j <- which(tolower(nm) == tolower(cand))[1]
+    if (!is.na(j) && any(!is.na(df[[j]]))) return(nm[j])
   }
-  subject <- if ("subject_id" %in% tolower(names(meta))) ci_key(meta[[ci_subject_col(meta)]]) else
-    if (!is.null(sample_key) && !is.null(src$map_via)) ci_map(sample_key, src$map_via, ctx) else rep(NA_character_, nrow(meta))
+  NA_character_
+}
+
+ci_omics_subjects <- function(meta, sample_key, src, ctx) {
+  j <- ci_subject_col(meta)
+  subject <- if (!is.na(j)) ci_key(meta[[j]]) else rep(NA_character_, nrow(meta))
   if (!is.null(sample_key) && !is.null(src$map_via)) {
     fill <- is.na(subject)
     subject[fill] <- ci_map(sample_key[fill], src$map_via, ctx)
   }
-  meta$.subject <- subject
+  subject
+}
+
+# Long tables (one row per sample and feature, as Olink NPX) are pivoted;
+# wide tables keep one row per sample with features in columns. A layout from
+# sources.R names the columns: feature, value (one platform per value column),
+# sample, split (a column such as platform whose levels are profiled apart),
+# or type = "wide". Without one the columns are recognised by name.
+ci_omics_from_table <- function(res, source, platform, df, src, ctx, layout = NULL) {
+  df <- as.data.frame(df, stringsAsFactors = FALSE, optional = TRUE)
+  names(df) <- ci_repair_names(names(df))
+  nm <- names(df)
+  k <- tolower(nm)
+  sample_col <- ci_pick_col(df, c(layout$sample, src$sample_col))
+  if (is.na(sample_col)) sample_col <- nm[gsub("[._ ]", "", k) %in% c("sampleid", "barcode", "samplename", "sample")][1]
+  if (identical(layout$type, "wide")) return(ci_omics_wide(res, source, platform, df, src, ctx, sample_col))
+  declared <- !is.null(layout$feature) || !is.null(layout$value)
+  feature_col <- ci_pick_col(df, if (is.null(layout$feature)) ci_omics_feature_names else layout$feature)
+  value_cols <- if (is.null(layout$value)) ci_pick_col(df, ci_omics_value_names) else nm[match(tolower(layout$value), k)]
+  if (declared) {
+    if (is.na(feature_col)) stop("layout for ", platform, ": no feature column with values among ",
+      paste(layout$feature, collapse = ", "))
+    absent <- layout$value[is.na(value_cols)]
+    if (length(absent)) ci_put(res, "issues", ci_frame(source = source, step = platform,
+      message = paste("value column not found:", paste(absent, collapse = ", "))))
+    value_cols <- value_cols[!is.na(value_cols)]
+    if (!length(value_cols)) stop("layout for ", platform, ": none of its value columns found")
+  }
+  if (is.na(feature_col) || !length(value_cols) || all(is.na(value_cols))) {
+    return(ci_omics_wide(res, source, platform, df, src, ctx, sample_col))
+  }
+  ci_omics_long(res, source, platform, df, src, ctx, feature_col, value_cols, sample_col, layout$split)
+}
+
+ci_pivot <- function(key, feat, value) {
+  samples <- unique(key[!is.na(key)])
+  features <- unique(feat[!is.na(feat)])
+  ok <- !is.na(key) & !is.na(feat) & !is.na(value)
+  if (!any(ok) || !length(features)) stop("no sample, feature and value together")
+  cell <- (match(feat[ok], features) - 1) * length(samples) + match(key[ok], samples)
+  sums <- rowsum(value[ok], cell)
+  cnt <- rowsum(rep(1, sum(ok)), cell)
+  mat <- matrix(NA_real_, length(samples), length(features), dimnames = list(NULL, features))
+  mat[as.numeric(rownames(sums))] <- sums / cnt
+  list(mat = mat, samples = samples, n_duplicate_cells = sum(cnt > 1))
+}
+
+ci_omics_long <- function(res, source, platform, df, src, ctx, feature_col, value_cols, sample_col, split = NULL) {
+  nm <- names(df)
+  subj_j <- ci_subject_col(df)
+  # sample key from the sample column, else subject and visit
+  if (is.na(sample_col) && is.na(subj_j)) stop("long layout for ", platform, ": no sample or subject_id column")
+  key <- if (!is.na(sample_col)) ci_key(df[[sample_col]]) else paste(ci_key(df[[subj_j]]), ci_visit(df), sep = "|")
+  feat <- as.character(ci_fix_text(df[[feature_col]]))
+  # sample metadata: columns constant within sample (checked on a subset)
+  check <- which(key %in% utils::head(unique(key[!is.na(key)]), 200L))
+  const <- vapply(setdiff(nm, c(value_cols, feature_col)), function(col) {
+    v <- df[[col]][check]
+    all(tapply(v, key[check], function(z) length(unique(z)) <= 1L))
+  }, logical(1))
+  meta_cols <- names(const)[const]
+  ci_profile_table(res, df[setdiff(nm, c(value_cols, meta_cols))], source,
+    paste0(platform, "/long_rows"), ctx, persons = if (is.na(subj_j)) NULL else ci_key(df[[subj_j]]), anchored = FALSE)
+  split_col <- if (is.null(split)) NA_character_ else ci_pick_col(df, split)
+  parts <- if (is.na(split_col)) list(all = seq_len(nrow(df))) else
+    split(seq_len(nrow(df)), as.character(ci_fix_text(df[[split_col]])))
+  for (part in names(parts)) {
+    rows <- parts[[part]]
+    base <- if (is.na(split_col)) platform else paste0(platform, ":", part)
+    for (v in value_cols) {
+      pf <- if (length(value_cols) > 1L) paste0(base, ":", v) else base
+      ci_try(res, source, pf, {
+        val <- ci_numeric_tokens(df[[v]][rows])
+        pv <- ci_pivot(key[rows], feat[rows], val$value)
+        meta <- df[rows[match(pv$samples, key[rows])], meta_cols, drop = FALSE]
+        sample_key <- if (!is.na(sample_col)) pv$samples else NULL
+        meta$.subject <- ci_omics_subjects(meta, sample_key, src, ctx)
+        meta$.visit <- ci_visit(meta, sample_key)
+        ci_put(res, "omics_platform_notes", ci_frame(source = source, platform = pf, layout = "long",
+          value_column = v, feature_column = feature_col,
+          sample_column = if (is.na(sample_col)) "subject_id|visit" else sample_col,
+          split = if (is.na(split_col)) NA_character_ else paste0(split_col, " = ", part),
+          n_duplicate_cells = pv$n_duplicate_cells))
+        if (!is.null(val$tokens)) ci_put(res, "omics_tokens", ci_frame(source = source, platform = pf,
+          feature = v, token = names(val$tokens), n = as.numeric(val$tokens)))
+        ci_profile_omics(res, source, pf, pv$mat, meta, ctx, profile_samples = v == value_cols[1],
+          samples_table = paste0(base, "/samples"))
+      })
+    }
+  }
+  invisible(NULL)
+}
+
+ci_omics_wide <- function(res, source, platform, df, src, ctx, sample_col) {
+  nm <- names(df)
+  k <- tolower(nm)
+  from <- src$feature_from
+  if (!is.null(from) && !is.na(from) && ncol(df) >= from) {
+    fcols <- nm[from:ncol(df)]
+  } else {
+    fcols <- nm[!vapply(nm, ci_is_id_name, logical(1)) & !grepl(ci_metadata_pattern, k) &
+      !grepl(ci_withheld_pattern, k)]
+  }
+  parsed <- lapply(df[fcols], ci_numeric_tokens)
+  numeric_share <- vapply(parsed, function(p) {
+    nn <- sum(!is.na(p$value))
+    nt <- if (is.null(p$tokens)) 0 else sum(p$tokens)
+    if (nn + nt == 0) 0 else nn / (nn + nt)
+  }, numeric(1))
+  fcols <- fcols[numeric_share >= 0.5]
+  if (length(fcols) < 5L) stop("no feature columns recognised")
+  mat <- do.call(cbind, lapply(parsed[fcols], `[[`, "value"))
+  colnames(mat) <- fcols
+  for (f in fcols) if (!is.null(parsed[[f]]$tokens)) ci_put(res, "omics_tokens", ci_frame(source = source,
+    platform = platform, feature = f, token = names(parsed[[f]]$tokens), n = as.numeric(parsed[[f]]$tokens)))
+  rm(parsed)
+  meta <- df[setdiff(nm, fcols)]
+  sample_key <- if (!is.na(sample_col)) ci_key(df[[sample_col]]) else NULL
+  ci_put(res, "omics_platform_notes", ci_frame(source = source, platform = platform, layout = "wide",
+    sample_column = if (is.na(sample_col)) NA_character_ else sample_col, first_feature = fcols[1],
+    n_duplicate_cells = NA_real_))
+  meta$.subject <- ci_omics_subjects(meta, sample_key, src, ctx)
   meta$.visit <- ci_visit(meta, sample_key)
   ci_profile_omics(res, source, platform, mat, meta, ctx)
 }
@@ -753,7 +926,10 @@ ci_restrict <- function(df, persons, ctx) {
 }
 
 ci_profile_frame <- function(res, df, src, table, ctx) {
-  persons <- ci_table_persons(df, src, ctx)
+  df <- as.data.frame(df, stringsAsFactors = FALSE, optional = TRUE)
+  names(df) <- ci_repair_names(names(df))
+  tp <- ci_table_persons(df, src, ctx)
+  persons <- tp$persons
   n_source <- NA_real_
   if (isTRUE(src$cohort_only)) {
     r <- ci_restrict(df, persons, ctx)
@@ -761,7 +937,7 @@ ci_profile_frame <- function(res, df, src, table, ctx) {
     persons <- r$persons
     n_source <- r$n
   }
-  ci_profile_table(res, df, src$id, table, ctx, persons = persons, n_rows_source = n_source)
+  ci_profile_table(res, df, src$id, table, ctx, persons = persons, n_rows_source = n_source, person_key = tp$key)
 }
 
 ci_read_rds_tree <- function(res, src, ctx) {
@@ -772,7 +948,7 @@ ci_read_rds_tree <- function(res, src, ctx) {
     path <- if (nzchar(leaf$path)) leaf$path else src$id
     ci_put(res, "structure", ci_structure_row(src$id, path, leaf$value))
     if (is.data.frame(leaf$value)) {
-      ci_profile_frame(res, leaf$value, src, path, ctx)
+      ci_try(res, src$id, path, ci_profile_frame(res, leaf$value, src, path, ctx))
       tables[[path]] <- leaf$value
     }
   }
@@ -780,13 +956,17 @@ ci_read_rds_tree <- function(res, src, ctx) {
     if (!is.null(ctx$master_dates)) tables$master <- ctx$master_dates
     for (panel in names(ci_panels)) {
       parts <- tables[ci_panels[[panel]]]
-      if (!any(vapply(parts, is.null, logical(1)))) ci_panel_correlations(res, src$id, panel, parts)
+      if (!any(vapply(parts, is.null, logical(1)))) {
+        ci_try(res, src$id, paste0("panel:", panel), ci_panel_correlations(res, src$id, panel, parts))
+      }
     }
     for (family in names(ci_visit_families)) {
       f <- ci_visit_families[[family]]
-      if (!is.null(tables[[f[1]]]) && !is.null(tables[[f[2]]])) ci_visit_pairs(res, src$id, family, tables[[f[1]]], tables[[f[2]]])
+      if (!is.null(tables[[f[1]]]) && !is.null(tables[[f[2]]])) {
+        ci_try(res, src$id, paste0("visits:", family), ci_visit_pairs(res, src$id, family, tables[[f[1]]], tables[[f[2]]]))
+      }
     }
-    ci_timing(res, src$id, tables)
+    ci_try(res, src$id, "timing", ci_timing(res, src$id, tables))
   }
   invisible(NULL)
 }
@@ -794,8 +974,12 @@ ci_read_rds_tree <- function(res, src, ctx) {
 ci_read_master <- function(res, src, ctx) {
   df <- readRDS(src$path)
   ci_put(res, "structure", ci_structure_row(src$id, src$id, df))
-  ci_profile_frame(res, df, src, "combined_data_set", ctx)
-  # data availability: flags as categorical counts among main-cohort members
+  ci_try(res, src$id, "combined_data_set", ci_profile_frame(res, df, src, "combined_data_set", ctx))
+  ci_try(res, src$id, "availability", ci_master_availability(res, src, df, ctx))
+}
+
+# data availability: flags as categorical counts among main-cohort members
+ci_master_availability <- function(res, src, df, ctx) {
   persons <- ci_key(df[[ci_subject_col(df)]])
   in_pop <- if (is.null(ctx$cohort)) rep(TRUE, nrow(df)) else persons %in% ctx$cohort
   flags <- grep("^(has_|attended_|completed_)", names(df), value = TRUE)
@@ -887,17 +1071,46 @@ ci_read_provenance <- function(res, src, ctx) {
   invisible(NULL)
 }
 
+# Each table is profiled on its own with the layout sources.R declares for
+# it; an error in one table is kept as an issue and the others still run.
 ci_read_omics_list <- function(res, src, ctx) {
   x <- readRDS(src$path)
   for (name in names(x)) {
     ci_put(res, "structure", ci_structure_row(src$id, name, x[[name]]))
-    if (is.data.frame(x[[name]])) ci_omics_from_table(res, src$id, sub("^df_", "", name), x[[name]], src, ctx)
+    if (!is.data.frame(x[[name]])) next
+    platform <- sub("^df_", "", name)
+    layout <- src$layouts[[platform]]
+    if (!is.null(src$layouts) && is.null(layout)) ci_put(res, "issues", ci_frame(source = src$id, step = platform,
+      message = "no layout declared in sources.R; columns recognised by name"))
+    ci_try(res, src$id, platform, ci_omics_from_table(res, src$id, platform, x[[name]], src, ctx, layout))
+    x[[name]] <- list()
+    invisible(gc())
   }
   invisible(NULL)
 }
 
+# read.csv with names repaired as read_csv() does; src$na lists the strings
+# read as missing (read_csv() also treats empty strings so). numeric = TRUE
+# reads columns that look numeric in the first rows as numbers, which is
+# much faster for wide files.
+ci_read_csv_file <- function(src, numeric = FALSE) {
+  na <- if (is.null(src$na)) "NA" else src$na
+  read <- function(classes = NA) utils::read.csv(src$path, check.names = FALSE, stringsAsFactors = FALSE,
+    encoding = "UTF-8", na.strings = na, colClasses = classes)
+  df <- NULL
+  if (numeric) {
+    head <- utils::read.csv(src$path, check.names = FALSE, stringsAsFactors = FALSE, encoding = "UTF-8",
+      na.strings = na, nrows = 50L)
+    classes <- ifelse(vapply(head, is.numeric, logical(1)), "numeric", NA)
+    df <- tryCatch(read(unname(classes)), error = function(e) NULL)
+  }
+  if (is.null(df)) df <- read()
+  names(df) <- ci_repair_names(names(df))
+  df
+}
+
 ci_read_omics_csv <- function(res, src, ctx) {
-  df <- utils::read.csv(src$path, check.names = FALSE, stringsAsFactors = FALSE, encoding = "UTF-8")
+  df <- ci_read_csv_file(src)
   ci_put(res, "structure", ci_structure_row(src$id, basename(src$path), df))
   ci_omics_from_table(res, src$id, src$id, df, src, ctx)
 }
@@ -917,9 +1130,24 @@ ci_read_tximport <- function(res, src, ctx, chunk = 5000L) {
   ab <- if (!is.null(x$abundance)) x$abundance else x$counts
   if (is.null(ab) || is.null(colnames(ab))) stop("no abundance or counts matrix with sample names")
   key <- ci_key(colnames(ab))
-  subject <- ci_map(key, src$map_via, ctx)
-  meta <- data.frame(.subject = subject, .visit = ci_visit(data.frame(row.names = seq_along(key)), key),
-    stringsAsFactors = FALSE)
+  # column names are BioSample names; the manifests give each its sample
+  # barcode (Patient ID), as code/07 matches them. Names that are barcodes
+  # already are used as they are.
+  barcode <- key
+  if (!is.null(src$manifests)) {
+    man <- ci_try(res, src$id, "manifest_map", ci_tx_manifest_map(src$manifests))
+    if (length(man)) {
+      norm <- function(z) toupper(gsub("[^A-Za-z0-9]", "", z))
+      hit <- key %in% names(man)
+      near <- !hit & norm(key) %in% norm(names(man))
+      barcode[hit] <- man[key[hit]]
+      barcode[near] <- man[match(norm(key[near]), norm(names(man)))]
+    }
+  }
+  subject <- ci_map(barcode, src$map_via, ctx)
+  visit <- ci_visit(data.frame(row.names = seq_along(key)), ifelse(is.na(subject), NA_character_, barcode))
+  if (!is.null(src$visit)) visit[visit == "unknown"] <- src$visit
+  meta <- data.frame(.subject = subject, .visit = visit, stringsAsFactors = FALSE)
   use <- if (sum(!is.na(subject)) >= ci_min_profile_n) which(!is.na(subject)) else seq_along(key)
   chunks <- split(seq_len(nrow(ab)), ceiling(seq_len(nrow(ab)) / chunk))
   extra <- list()
@@ -942,9 +1170,63 @@ ci_read_tximport <- function(res, src, ctx, chunk = 5000L) {
   rm(ab)
   invisible(gc())
   ci_put(res, "omics_platform_notes", ci_frame(source = src$id, platform = "rna_seq", layout = "tximport",
+    sample_column = if (is.null(src$manifests)) "column names" else "column names (BioSample) via manifests",
     n_features_source = n_genes, feature_filter = "non-zero in at least 10% of profiled samples"))
   ci_profile_omics(res, src$id, "rna_seq", mat, meta[use, , drop = FALSE], ctx, transform = "log2p1",
     extra = extra, n_samples_source = n_source)
+}
+
+# BioSample name to sample barcode from the sequencing manifests. Patient IDs
+# that are not barcodes (empty wells, buffers, annotated IDs) contain a space
+# or "/" and are dropped, as are BioSample names given two barcodes.
+ci_tx_manifest_map <- function(dir) {
+  files <- list.files(dir, pattern = "[.]xlsx$", full.names = TRUE)
+  files <- files[!startsWith(basename(files), "~$")]
+  if (!length(files)) stop("no manifest workbooks")
+  pairs <- ci_bind(lapply(files, function(f) {
+    d <- ci_read_xlsx(f, 1L)
+    k <- gsub("[^a-z]", "", tolower(names(d)))
+    b <- which(k == "biosamplename")[1]
+    p <- which(k == "patientid")[1]
+    if (is.na(b) || is.na(p)) return(NULL)
+    ci_frame(biosample = ci_key(ci_fix_text(as.character(d[[b]]))), barcode = ci_key(ci_fix_text(as.character(d[[p]]))))
+  }))
+  if (is.null(pairs)) stop("no manifest with BioSample Name and Patient ID columns")
+  pairs <- unique(pairs[!is.na(pairs$biosample) & !is.na(pairs$barcode) & !grepl("[[:space:]/]", pairs$barcode), ])
+  pairs <- pairs[!pairs$biosample %in% pairs$biosample[duplicated(pairs$biosample)], ]
+  stats::setNames(pairs$barcode, pairs$biosample)
+}
+
+# Untargeted LC-MS (XCMS) intensities. The file may hold samples in rows, or
+# features in rows with m/z and retention-time columns. It has no sample IDs,
+# so it is profiled on all samples, unlinked to people.
+ci_xcms_feature_meta <- c("mz", "mzmed", "mzmin", "mzmax", "rt", "rtmed", "rtmin", "rtmax", "npeaks",
+  "isotopes", "adduct", "pcgroup", "name", "feature", "featureid")
+ci_read_xcms <- function(res, src, ctx) {
+  df <- ci_read_csv_file(src, numeric = TRUE)
+  ci_put(res, "structure", ci_structure_row(src$id, basename(src$path), df))
+  k <- gsub("[._ ]", "", tolower(names(df)))
+  fm <- k %in% ci_xcms_feature_meta
+  if (sum(fm) < 2L) return(ci_omics_from_table(res, src$id, src$id, df, src, ctx, list(type = "wide")))
+  samples <- names(df)[vapply(df, is.numeric, logical(1)) & !fm]
+  if (length(samples) < ci_min_profile_n) stop("features in rows, but fewer than 50 numeric sample columns")
+  ci_profile_table(res, df[fm], src$id, paste0(src$id, "/features"), ctx, anchored = FALSE)
+  j <- match(c("name", "feature", "featureid"), k)
+  j <- j[!is.na(j)][1]
+  mz <- match(c("mzmed", "mz"), k)
+  rt <- match(c("rtmed", "rt"), k)
+  mz <- mz[!is.na(mz)][1]
+  rt <- rt[!is.na(rt)][1]
+  feature <- if (!is.na(j)) as.character(ci_fix_text(df[[j]])) else if (!is.na(mz) && !is.na(rt))
+    sprintf("M%.4fT%.1f", df[[mz]], df[[rt]]) else paste0("feature_", seq_len(nrow(df)))
+  mat <- t(as.matrix(df[samples]))
+  dimnames(mat) <- list(NULL, make.unique(feature))
+  rm(df)
+  invisible(gc())
+  ci_put(res, "omics_platform_notes", ci_frame(source = src$id, platform = src$id, layout = "features_in_rows",
+    sample_column = NA_character_, first_feature = colnames(mat)[1], n_duplicate_cells = NA_real_))
+  meta <- data.frame(.subject = rep(NA_character_, nrow(mat)), .visit = "unknown", stringsAsFactors = FALSE)
+  ci_profile_omics(res, src$id, src$id, mat, meta, ctx)
 }
 
 ci_read_xlsx <- function(path, sheet) {
@@ -1026,7 +1308,7 @@ ci_read_psam_dir <- function(res, src, ctx) {
 }
 
 ci_read_csv <- function(res, src, ctx) {
-  df <- utils::read.csv(src$path, check.names = FALSE, stringsAsFactors = FALSE, encoding = "UTF-8")
+  df <- ci_read_csv_file(src)
   ci_put(res, "structure", ci_structure_row(src$id, basename(src$path), df))
   ci_profile_frame(res, df, src, sub("[.]csv$", "", basename(src$path)), ctx)
 }
@@ -1034,7 +1316,7 @@ ci_read_csv <- function(res, src, ctx) {
 ci_readers <- list(rds_tree = ci_read_rds_tree, master = ci_read_master, id_sets = ci_read_id_sets,
   provenance = ci_read_provenance, omics_list = ci_read_omics_list, omics_csv = ci_read_omics_csv,
   omics_rds = ci_read_omics_rds, tximport = ci_read_tximport, xlsx_dir = ci_read_xlsx_dir,
-  autoantibodies = ci_read_autoantibodies, psam_dir = ci_read_psam_dir, csv = ci_read_csv)
+  autoantibodies = ci_read_autoantibodies, psam_dir = ci_read_psam_dir, csv = ci_read_csv, xcms = ci_read_xcms)
 
 ## context, discovery and environment ---------------------------------------------------
 
@@ -1097,8 +1379,22 @@ ci_context <- function(s) {
     ambiguous <- unique(pairs$key[duplicated(pairs$key)])
     pairs <- pairs[!pairs$key %in% ambiguous, ]
     ctx$identifiers <- stats::setNames(pairs$subject, pairs$key)
-    notes$identifiers_ambiguous <- as.character(length(ambiguous))
+    n_amb <- length(ambiguous)
+    notes$identifiers_ambiguous <- if (n_amb == 0) "none" else if (n_amb < ci_min_cell) "fewer than 10" else
+      paste("about", ci_round_base * round(n_amb / ci_round_base))
   }) else notes$identifiers <- "not found: project identifiers cannot be mapped"
+  # genotyping sample wells and LPIDs to people, through the DNA sample barcode
+  geno_path <- ci_genomics_lookup(s)
+  if (file.exists(geno_path) && !is.null(ctx$sample_lookup)) attempt("genomics", {
+    lk <- utils::read.delim(geno_path, check.names = FALSE, stringsAsFactors = FALSE, colClasses = "character",
+      encoding = "UTF-8")
+    subject <- unname(ctx$sample_lookup[ci_key(lk$PatientId)])
+    keys <- c(if ("Sample Well" %in% names(lk)) ci_key(lk[["Sample Well"]]), if ("LPID" %in% names(lk)) ci_key(lk$LPID))
+    pairs <- unique(ci_frame(key = keys, subject = rep(subject, length.out = length(keys))))
+    pairs <- pairs[!is.na(pairs$key) & !is.na(pairs$subject), ]
+    pairs <- pairs[!pairs$key %in% pairs$key[duplicated(pairs$key)], ]
+    ctx$genomics <- stats::setNames(pairs$subject, pairs$key)
+  })
   ctx$notes <- ci_frame(key = names(notes), value = unlist(notes, use.names = FALSE))
   ctx
 }
@@ -1152,28 +1448,42 @@ ci_environment <- function() {
 
 ## run -------------------------------------------------------------------------------
 
+# A checkpoint is reused only if its input files are unchanged and it
+# finished: a source that failed, wholly or in part, is profiled again.
+ci_reusable <- function(file, identity) {
+  if (!file.exists(file)) return(FALSE)
+  cp <- tryCatch(readRDS(file), error = function(e) NULL)
+  !is.null(cp) && identical(cp$identity, identity) && isTRUE(cp$record$status %in% c("ok", "missing"))
+}
+
 #' Run the inventory. Each source is checkpointed in `internal`; with
-#' resume = TRUE a source is reused when its input files have not changed.
+#' resume = TRUE a source is reused when its input files have not changed
+#' and its last run finished. `sources` limits which sources are profiled
+#' now and `rerun` profiles sources again whatever their checkpoint says.
+#' The combined result always holds every checkpointed source, so a partial
+#' run adds to an earlier full one.
 ci_run <- function(saved_root = Sys.getenv("REACT_SAVED_ROOT", "D:/saved_objects"),
                    data_root = Sys.getenv("REACT_DATA_ROOT", "//se-sandisk-vm01/react_data03$"),
                    project_root = Sys.getenv("REACT_GELC_PROJECT", ""),
-                   internal = "clinical-inventory-INTERNAL", sources = "all", resume = TRUE,
-                   discover = TRUE, progress = TRUE) {
+                   internal = Sys.getenv("REACT_CI_INTERNAL", "clinical-inventory-INTERNAL"),
+                   sources = "all", rerun = character(), resume = TRUE, discover = TRUE, progress = TRUE) {
   s <- list(saved_root = saved_root, data_root = data_root, project_root = project_root)
   dir.create(internal, recursive = TRUE, showWarnings = FALSE)
   writeLines(c("ENCLAVE INTERNAL: unsuppressed aggregates. Never transfer this folder.",
     "Run 02_prepare_export.R and request output checking for the candidate folder only."),
     file.path(internal, "DO_NOT_TRANSFER.txt"))
   registry <- ci_sources(s)
-  if (!identical(sources, "all")) registry <- Filter(function(x) x$id %in% sources, registry)
+  ids <- vapply(registry, `[[`, "", "id")
+  unknown <- setdiff(c(sources, rerun), c("all", ids))
+  if (length(unknown)) stop("Unknown sources: ", paste(unknown, collapse = ", "))
+  todo <- if (identical(sources, "all")) registry else registry[ids %in% sources]
   ctx <- ci_context(s)
-  log <- list()
-  for (src in registry) {
+  for (src in todo) {
     out_file <- file.path(internal, paste0("source_", src$id, ".rds"))
     paths <- unname(src$path)
     info <- file.info(paths)
     identity <- paste(paths, info$size, format(info$mtime), collapse = ";")
-    if (resume && file.exists(out_file) && identical(readRDS(out_file)$identity, identity)) {
+    if (resume && !src$id %in% rerun && ci_reusable(out_file, identity)) {
       if (progress) message("Reusing ", src$id)
       next
     }
@@ -1183,14 +1493,15 @@ ci_run <- function(saved_root = Sys.getenv("REACT_SAVED_ROOT", "D:/saved_objects
     found <- any(file.exists(paths))
     status <- if (!found) "missing" else tryCatch({
       ci_readers[[src$reader]](res, src, ctx)
-      "ok"
+      if (length(res$issues)) "partial" else "ok"
     }, error = function(e) structure("error", message = conditionMessage(e)))
-    message_text <- if (identical(as.character(status), "error")) ci_sanitise(attr(status, "message")) else ""
+    message_text <- if (identical(as.character(status), "error")) ci_sanitise(attr(status, "message")) else
+      if (identical(status, "partial")) "some steps failed: see 00_source_issues.csv" else ""
     record <- ci_frame(source = src$id, group = src$group, reader = src$reader, status = as.character(status),
       message = message_text, size_mb = round(sum(info$size, na.rm = TRUE) / 2^20, 1),
       modified = if (found) format(max(info$mtime, na.rm = TRUE), "%Y-%m-%d") else NA_character_,
-      seconds = round(as.numeric(difftime(Sys.time(), started, units = "secs"))))
-    saveRDS(list(identity = identity, record = record, frames = ci_finish(res)), out_file)
+      seconds = round(as.numeric(difftime(Sys.time(), started, units = "secs"))), kit = ci_version)
+    saveRDS(list(identity = identity, kit = ci_version, record = record, frames = ci_finish(res)), out_file)
     if (progress) message("  ", record$status, if (nzchar(message_text)) paste0(": ", message_text) else "",
       " (", record$seconds, " s)")
     rm(res)
@@ -1198,11 +1509,16 @@ ci_run <- function(saved_root = Sys.getenv("REACT_SAVED_ROOT", "D:/saved_objects
   }
   extras <- list(context = ctx$notes, environment = ci_environment(),
     discovery = if (discover) ci_discover(ci_discovery_roots(s)) else NULL)
-  files <- file.path(internal, paste0("source_", vapply(registry, `[[`, "", "id"), ".rds"))
+  files <- file.path(internal, paste0("source_", ids, ".rds"))
   parts <- lapply(files[file.exists(files)], readRDS)
   kinds <- unique(unlist(lapply(parts, function(p) names(p$frames))))
   frames <- stats::setNames(lapply(kinds, function(k) ci_bind(lapply(parts, function(p) p$frames[[k]]))), kinds)
-  frames$sources <- ci_bind(lapply(parts, `[[`, "record"))
+  # checkpoints from the first release carry no kit version
+  frames$sources <- ci_bind(lapply(parts, function(p) {
+    r <- p$record
+    r$kit <- if (is.null(p$kit)) "clinical-inventory-v1" else p$kit
+    r
+  }))
   out <- list(version = ci_version, created = format(Sys.time(), "%Y-%m-%d %H:%M"), frames = c(frames, extras))
   saveRDS(out, file.path(internal, "clinical-inventory-INTERNAL.rds"))
   if (progress) message("Inventory saved in ", internal, ". Keep it in the enclave; next run 02_prepare_export.R.")

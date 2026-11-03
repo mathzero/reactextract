@@ -17,7 +17,7 @@ md5_text <- function(path) {
 utils::write.csv(data.frame(file = files, md5 = vapply(file.path(kit, files), md5_text, character(1))),
   file.path(kit, "kit-checksums.csv"), row.names = FALSE)
 if (identical(args, "--checksums-only")) quit(save = "no")
-dest <- if (length(args)) args[1] else "dist/reactextract-clinical-inventory-v1"
+dest <- if (length(args)) args[1] else "dist/reactextract-clinical-inventory-v1.1"
 if (file.exists(dest) || file.exists(paste0(dest, ".zip"))) stop("Choose a new output directory; existing kits are not overwritten.")
 dir.create(dest, recursive = TRUE)
 if (!all(file.copy(file.path(kit, c(files, "kit-checksums.csv")), dest))) stop("Kit copy failed.")

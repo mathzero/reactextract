@@ -15,6 +15,17 @@
   rare level or extreme value reaches the output.
   `scripts/build_clinical_inventory_kit.R` writes the checksums and the
   transfer zip. The package code is unchanged.
+- Clinical inventory kit v1.1 repairs the seven sources that stopped in the
+  first enclave run and adds two. Windows-1252 free text is converted on
+  reading. An error in one column, table or step is recorded and the rest is
+  still profiled. Proteomics tables use the column layouts declared in
+  `sources.R`, with raw and normalised values profiled separately. CSV column
+  names are repaired as `read_csv()` repairs them. RNA-seq samples are linked
+  to people through the manifests' BioSample names. The untargeted XCMS
+  metabolomics table and the APOE4 carrier file are new sources. A partial
+  run now keeps every other source's checkpoint and profiles failed sources
+  again. The v1.1 run profiles only these nine sources, and its export is a
+  supplement to the first candidate.
 
 # reactextract 0.6.0.9009 (development)
 

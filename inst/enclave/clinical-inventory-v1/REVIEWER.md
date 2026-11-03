@@ -4,6 +4,36 @@ The candidate describes the REACT Clinical Study's wrangled datasets and omics
 files. It contains aggregate tables only: no participant identifiers, sample
 barcodes, free text, dates of birth, postcodes, or individual values.
 
+## The v1.1 supplement
+
+`clinical-inventory-v1.1-supplement-candidate` holds nine sources only:
+`wrangled`, `master`, `proteomics`, `metabolomics_rpos`, `metabolomics_rneg`,
+`metabolomics_xcms`, `transcriptomics_t0`, `transcriptomics_t1` and `apoe4`.
+The first seven stopped on kit bugs in the first run, so the first candidate
+held their tables only up to the point of failure. The last two are new. The
+rows for these nine replace their rows in the first candidate. The rules are
+the same, so where a table was profiled the same way in both runs, its rows
+are identical. Differences come from the v1.1 fixes:
+
+- `evbirth` and `numbirth` (births) are now profiled; they were withheld as
+  if they were dates of birth;
+- dates stored as text are profiled as dates (months and quantiles) rather
+  than as text;
+- placeholder dates (such as 1582-10-14, the SPSS zero date) are counted in
+  `n_placeholder` and left out of date quantiles. The count of dates that the
+  quantiles use is not written, so it can't be subtracted from `n` to recover
+  a suppressed placeholder count;
+- `n_recoded` in `04_columns.csv` counts text values converted from
+  Windows-1252, with the usual count protection;
+- each proteomics table is profiled with its declared columns. Where a table
+  has both a raw and a normalised value, both are profiled as separate
+  platforms (`alamar:npq`, `alamar:npq_normalised`).
+
+The untargeted XCMS table has no sample IDs, so its profile is not linked to
+people: it has no breakdowns by anchor. The APOE4 file is linked to cohort
+members through the genotyping sample wells. Its categories follow the usual
+10-person label rule.
+
 ## Protections applied by the kit
 
 - **Counts.** Counts below 10, zeros included, are suppressed. Where a single

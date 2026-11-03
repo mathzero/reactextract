@@ -2,7 +2,10 @@
 # test. Nothing here comes from REACT data: values are random draws, and the
 # structure follows the wrangling code (code/revised/01 and 02). Sentinels
 # (rare levels, free text, extreme values, one-person months, a tiny
-# non-REACT branch) must never reach the exported candidate.
+# non-REACT branch) must never reach the exported candidate. v1.1 adds the
+# layouts that stopped the first enclave run: Windows-1252 free text, long
+# proteomics tables with empty name columns, a CSV with an unnamed column,
+# and expression matrices named by BioSample.
 
 ci_fixture_sentinels <- c("SENTINEL", "RareSentinelLevel", "987.654", "987.65", "987.7", "123.456", "2014-03")
 
@@ -45,10 +48,17 @@ ci_fixture_tree <- function(root, n = 600L, seed = 20261102L) {
   # registration with free text and a symptom block
   other_text <- rep(NA_character_, n)
   other_text[1:40] <- paste("SENTINEL free text", 1:40)
+  # Windows-1252 bytes (e acute, curly quotes) that are not valid UTF-8
+  cp1252 <- c("caf\xe9 SENTINEL", "\x93SENTINEL\x94 note", "na\xefve SENTINEL")
+  add_comm <- rep(NA_character_, n)
+  add_comm[sample(n, 120)] <- paste(pick(cp1252, 120), seq_len(120))
+  date_other <- rep(NA_character_, n)
+  date_other[sample(n, 200)] <- format(as.Date("2020-01-01") + pick(0:700, 200))
   reg <- data.frame(subject_id = subject, u_password = sprintf("UPW%06d", seq_len(n)), registration_date = reg_date,
     registered_under = route, symptoms_present_01 = pick(c(0, 1, NA), n), symptoms_duration_01 = pick(c(duration, NA), n),
     symptoms_present_02 = pick(c(0, 1), n), lc_categorical = lc, symptoms_other_text = other_text,
-    age_at_registration = age, gender_group = sex, stringsAsFactors = FALSE)
+    age_at_registration = age, gender_group = sex, add_comm = add_comm, symptoms_date_other = date_other,
+    stringsAsFactors = FALSE)
   clinic <- function(who, visit) {
     k <- length(who)
     d <- data.frame(subject_id = who, clinic_date = as.Date(if (visit == 0) "2021-03-01" else "2021-10-20") + pick(0:150, k),
@@ -83,6 +93,8 @@ ci_fixture_tree <- function(root, n = 600L, seed = 20261102L) {
     for (j in 1:6) d[[paste0("gad7_", j)]] <- if (raw) codes[, j] else ifelse(codes[, j] > 0, likert[pmax(codes[, j], 1)], NA)
     d$wemwbs_total <- round(stats::rnorm(k, 48, 9))
     d$rare_choice <- if (raw) c(rep(2, 3), rep(1, k - 3)) else c(rep("RareSentinelLevel", 3), rep("Common answer", k - 3))
+    d$evbirth <- if (raw) pick(1:2, k) else pick(c("Yes", "No"), k)
+    d$numbirth_num <- pick(0:4, k)
     d
   }
   illumina <- function(who, barcodes, stage) data.frame(passcode = unname(passcode[as.character(who)]),
@@ -96,6 +108,10 @@ ci_fixture_tree <- function(root, n = 600L, seed = 20261102L) {
     data.frame(subject_id = s, U_PASSCODE = unname(passcode[as.character(s)]), round = r,
       estbinres = pick(0:1, length(r)), U_AGE = age[subject == s], stringsAsFactors = FALSE)
   }))
+  rounds$add_comm <- NA_character_
+  rounds$add_comm[sample(nrow(rounds), 150)] <- paste(pick(cp1252, 150), seq_len(150))
+  rounds$react_infection_date_raw <- as.Date("2020-09-01") + pick(0:500, nrow(rounds))
+  rounds$react_infection_date_raw[sample(nrow(rounds), 40)] <- as.Date("1582-10-14")
   vaccines <- do.call(rbind, lapply(subject[seq_len(round(n * 0.8))], function(s) {
     k <- sample(1:4, 1)
     data.frame(subject_id = s, recorded_date = as.Date("2021-01-01") + sort(sample(0:500, k)),
@@ -148,7 +164,7 @@ ci_fixture_tree <- function(root, n = 600L, seed = 20261102L) {
     has_proteins_olink_t0 = yn(subject %in% olink_people), has_proteins_olink_t1 = yn(subject %in% intersect(olink_people, fu)),
     has_genome = yn(subject %in% sample(cohort, 400)), has_linked_HES_data = yn(stats::runif(n) < 0.6),
     has_linked_GP_data = yn(stats::runif(n) < 0.95), has_cog_1 = yn(stats::runif(n) < 0.4),
-    has_2022_data = yn(stats::runif(n) < 0.5), stringsAsFactors = FALSE)
+    has_2022_data = yn(stats::runif(n) < 0.5), add_comm = add_comm, stringsAsFactors = FALSE)
   saveRDS(master, file.path(meta, "combined_data_set.rds"))
   saveRDS(cohort, file.path(project, "subject_ids_main_cohort.rds"))
   lookup <- data.frame(subject_id = c(subject, fu), barcode = c(unname(barcode_t0), unname(barcode_t1)))
@@ -162,37 +178,54 @@ ci_fixture_tree <- function(root, n = 600L, seed = 20261102L) {
     input_hashes = c("D:/saved_objects/react1_and_2_combined_wrangled_deduped.rds" = "00aa"),
     session = utils::sessionInfo()), file.path(meta, "cohort_provenance.rds"))
 
-  # proteomics: Olink long (NPX), Alamar and LC-MS wide
+  # proteomics, as olink_alamar_lcms_combined.rds: long Olink (NPX), Alamar
+  # (NPQ, raw and normalised) and LC-MS (raw and normalised) tables, where
+  # protein_name is empty or partly filled, wide LC-MS, and df_allplats
+  # stacking the three long tables
   op <- olink_people
   op_t1 <- intersect(op, fu)
-  olink_samples <- data.frame(subject_id = c(op, op_t1), timepoint = c(rep("First visit", length(op)),
-    rep("Second visit", length(op_t1))), SampleID = c(unname(barcode_t0[as.character(op)]), unname(barcode_t1[as.character(op_t1)])),
-    PlateID = pick(sprintf("Plate%d", 1:4), length(op) + length(op_t1)), stringsAsFactors = FALSE)
-  assays <- sprintf("OID%05d_P%02d", 1:40, 1:40)
-  olink <- olink_samples[rep(seq_len(nrow(olink_samples)), each = length(assays)), ]
-  olink$Assay <- rep(assays, nrow(olink_samples))
-  latent <- stats::rnorm(nrow(olink_samples))
-  olink$NPX <- round(rep(latent, each = length(assays)) * 0.8 + stats::rnorm(nrow(olink), 3, 1), 3)
-  olink$QC_Warning <- pick(c("PASS", "PASS", "PASS", "WARN"), nrow(olink))
-  olink$LOD <- rep(round(stats::runif(length(assays), 0.5, 1.5), 2), nrow(olink_samples))
-  wide_omics <- function(who, k, prefix, missing = 0) {
+  long_omics <- function(who, k, prefix, scale) {
     t1 <- intersect(who, fu)
-    d <- data.frame(subject_id = c(who, t1), timepoint = c(rep("First visit", length(who)), rep("Second visit", length(t1))),
-      SampleName = c(unname(barcode_t0[as.character(who)]), unname(barcode_t1[as.character(t1)])),
-      batch = pick(c("B1", "B2", "B3"), length(who) + length(t1)), stringsAsFactors = FALSE)
-    z <- stats::rnorm(nrow(d))
-    for (j in seq_len(k)) {
-      v <- round(exp(2 + 0.5 * z + stats::rnorm(nrow(d), 0, 0.6)), 3)
-      v[stats::runif(nrow(d)) < missing] <- NA
-      d[[sprintf("%s_%03d", prefix, j)]] <- v
-    }
+    smp <- data.frame(subject_id = c(who, t1), timepoint = c(rep("First visit", length(who)), rep("Second visit", length(t1))),
+      sample_id = c(unname(barcode_t0[as.character(who)]), unname(barcode_t1[as.character(t1)])),
+      plate_id = pick(sprintf("Plate%d", 1:4), length(who) + length(t1)), stringsAsFactors = FALSE)
+    d <- smp[rep(seq_len(nrow(smp)), each = k), ]
+    d$protein_cleaned <- rep(sprintf("%s protein %02d", prefix, seq_len(k)), nrow(smp))
+    latent <- stats::rnorm(nrow(smp))
+    d$value <- round(rep(latent, each = k) * 0.8 + stats::rnorm(nrow(d), scale, 1), 3)
+    d$lod <- rep(round(stats::runif(k, 0.5, 1.5), 2), nrow(smp))
+    rownames(d) <- NULL
     d
   }
-  proteomics <- list(df_olink = olink, df_alamar = wide_omics(sample(cohort, 150), 30, "NULISA"),
-    df_lcms = wide_omics(cohort, 50, "LCMS", 0.1))
+  olink <- long_omics(op, 40, "Olink", 3)
+  olink$olink_id <- sprintf("OID%05d", match(olink$protein_cleaned, unique(olink$protein_cleaned)))
+  olink$assay <- toupper(sub(" protein ", "", olink$protein_cleaned))
+  names(olink)[names(olink) == "value"] <- "npx"
+  olink$qc_warning <- pick(c("PASS", "PASS", "PASS", "WARN"), nrow(olink))
+  alamar <- long_omics(sample(cohort, 150), 30, "Alamar", 12)
+  alamar$target_name <- alamar$protein_cleaned
+  alamar$protein_name <- ifelse(stats::runif(nrow(alamar)) < 0.5, alamar$protein_cleaned, NA)
+  alamar$npq <- alamar$value
+  alamar$npq_normalised <- round(alamar$value - stats::ave(alamar$value, alamar$plate_id) + 12, 3)
+  alamar$value <- NULL
+  lcms_long <- long_omics(cohort, 50, "LCMS", 20)
+  lcms_long$protein_name <- NA_character_
+  lcms_long$protein_original_name <- lcms_long$protein_cleaned
+  lcms_long$value_normalised <- round(lcms_long$value - stats::ave(lcms_long$value, lcms_long$plate_id) + 20, 3)
+  lcms <- reshape(lcms_long[c("subject_id", "timepoint", "sample_id", "protein_cleaned", "value")],
+    idvar = c("subject_id", "timepoint", "sample_id"), timevar = "protein_cleaned", direction = "wide")
+  names(lcms) <- sub("^value[.]LCMS protein ", "lcms_", names(lcms))
+  names(lcms)[names(lcms) == "sample_id"] <- "sample_name"
+  lcms$platform <- "LC-MS"
+  stack <- function(d, platform, value) data.frame(platform = platform, sample_id = d$sample_id, subject_id = d$subject_id,
+    timepoint = d$timepoint, protein_cleaned = d$protein_cleaned, value = d[[value]], stringsAsFactors = FALSE)
+  allplats <- rbind(stack(olink, "Olink", "npx"), stack(alamar, "Alamar", "npq"), stack(lcms_long, "LC-MS", "value"))
+  allplats$protein_name <- ifelse(allplats$platform == "Alamar", allplats$protein_cleaned, NA)
+  proteomics <- list(df_allplats = allplats, df_olink = olink, df_alamar = alamar, df_lcms = lcms, df_lcms_long = lcms_long)
   saveRDS(proteomics, file.path(omics, "olink_alamar_lcms_combined.rds"))
 
-  # metabolomics: 22 metadata columns, then features (PeakPantheR layout)
+  # metabolomics: an unnamed row-number column, 21 metadata columns, then
+  # features from column 23 (PeakPantheR layout)
   metab <- function(mode, k) {
     who <- sample(cohort, round(length(cohort) * 0.8))
     t1 <- intersect(who, fu)
@@ -202,10 +235,10 @@ ci_fixture_tree <- function(root, n = 600L, seed = 20261102L) {
       `Run Order` = seq_len(m), `Acquired Time` = format(as.POSIXct("2024-03-01") + seq_len(m) * 600),
       `Sample ID` = sid, `Subject ID` = c(sprintf("S%06d", seq_len(m - 12)), rep(NA, 12)),
       `Sample Type` = c(rep("Study Sample", m - 12), rep("Study Reference", 12)), check.names = FALSE, stringsAsFactors = FALSE)
-    for (j in 8:22) d[[sprintf("meta_%02d", j)]] <- pick(c("a", "b"), m)
+    for (j in 8:21) d[[sprintf("meta_%02d", j)]] <- pick(c("a", "b"), m)
     batch_shift <- d$Batch * 0.3
     for (j in seq_len(k)) d[[sprintf("%s_feature_%03d", mode, j)]] <- round(exp(8 + batch_shift + stats::rnorm(m, 0, 1)), 1)
-    utils::write.csv(d, metab_path(mode), row.names = FALSE)
+    utils::write.csv(d, metab_path(mode))
     c(d[["Sample ID"]], d[["Subject ID"]], d[["Sample File Name"]])
   }
   metab_path <- function(mode) {
@@ -250,9 +283,11 @@ ci_fixture_tree <- function(root, n = 600L, seed = 20261102L) {
   }
   tx_t0_people <- sample(cohort, 200)
   vitt <- sprintf("VITTQ%05d", 1:20)
-  saveRDS(tx(c(unname(barcode_t0[as.character(tx_t0_people)]), vitt)), file.path(omics, "tx_baseline.rds"))
-  saveRDS(tx(unname(barcode_t1[as.character(intersect(tx_t0_people, fu))])), file.path(omics, "tx_recall.rds"))
-  ids$other <- c(ids$other, vitt)
+  tx_codes <- c(unname(barcode_t0[as.character(tx_t0_people)]), unname(barcode_t1[as.character(intersect(tx_t0_people, fu))]))
+  biosample <- stats::setNames(sprintf("RNAQ%06d", seq_along(tx_codes)), tx_codes)
+  saveRDS(tx(c(unname(biosample[unname(barcode_t0[as.character(tx_t0_people)])]), vitt)), file.path(omics, "tx_baseline.rds"))
+  saveRDS(tx(unname(biosample[unname(barcode_t1[as.character(intersect(tx_t0_people, fu))])])), file.path(omics, "tx_recall.rds"))
+  ids$other <- c(ids$other, vitt, unname(biosample))
 
   # genomics: psam sample wells and the well-to-barcode lookup
   wells <- sprintf("WQ%05d", seq_len(400))
@@ -264,6 +299,25 @@ ci_fixture_tree <- function(root, n = 600L, seed = 20261102L) {
     LPID = lpid, check.names = FALSE), file.path(data, "genomics", "genomics", "data", "REACT_Covid19_DNA_Sample_LPIDs-1.tsv"),
     sep = "\t", row.names = FALSE, quote = FALSE)
   ids$other <- c(ids$other, wells, lpid)
+
+  # a folder with more than 25 files, listed by extension
+  for (i in 1:28) writeLines("invented", file.path(data, "proteomics", "olink", sprintf("run_%02d.parquet", i)))
+  for (i in 1:2) writeLines("invented", file.path(data, "proteomics", "olink", sprintf("notes_%d.csv", i)))
+
+  # APOE4 carrier status by genotyping sample well
+  dir.create(file.path(data, "genomics", "APOE4"), showWarnings = FALSE)
+  apoe <- data.frame(IID = wells[1:350], apoe_genotype = pick(c("e3/e3", "e3/e4", "e2/e3", "e4/e4", "e2/e4"), 350,
+    prob = c(0.6, 0.23, 0.12, 0.03, 0.02)), stringsAsFactors = FALSE)
+  apoe$apoe4_carrier <- as.integer(grepl("e4", apoe$apoe_genotype))
+  utils::write.csv(apoe, file.path(data, "genomics", "APOE4", "apoe4_carrier.csv"), row.names = FALSE)
+  writeLines("invented", file.path(data, "genomics", "APOE4", "README.txt"))
+
+  # untargeted XCMS intensities: samples in rows, no sample IDs
+  xcms <- data.frame(batch = pick(1:4, 420), run_order = seq_len(420))
+  z <- stats::rnorm(420)
+  for (j in 1:80) xcms[[sprintf("M%.4fT%.1f", 100 + j * 3.1, 20 + j)]] <- round(exp(10 + 0.4 * z + stats::rnorm(420)), 1)
+  utils::write.csv(xcms, file.path(data, "metabolomics", "metabolomics_lc_ms",
+    "XCMS_metabolomics_intensity_data_2_noSampleID_CL.csv"), row.names = FALSE)
 
   # later questionnaires and Cognitron, including people outside the cohort
   outsiders <- sprintf("PX%06d", 1:300)
@@ -299,9 +353,7 @@ ci_fixture_tree <- function(root, n = 600L, seed = 20261102L) {
 
   # workbooks need openxlsx; without it these two sources are reported missing
   if (requireNamespace("openxlsx", quietly = TRUE)) {
-    tx_people <- c(tx_t0_people, intersect(tx_t0_people, fu))
-    tx_codes <- c(unname(barcode_t0[as.character(tx_t0_people)]), unname(barcode_t1[as.character(intersect(tx_t0_people, fu))]))
-    man <- data.frame(`Patient ID` = c(tx_codes, "Empty/buffer"), `BioSample Name` = c(tx_codes, "EMPTY"),
+    man <- data.frame(`Patient ID` = c(tx_codes, "Empty/buffer"), `BioSample Name` = c(unname(biosample), "EMPTY"),
       Gender = c(pick(c("M", "F"), length(tx_codes)), NA), `RNA Quality number` = c(round(stats::runif(length(tx_codes), 6, 10), 1), NA),
       `Sample Origin Location` = c(pick(c("Prescot", "Luton"), length(tx_codes)), NA), check.names = FALSE)
     half <- seq_len(round(nrow(man) / 2))

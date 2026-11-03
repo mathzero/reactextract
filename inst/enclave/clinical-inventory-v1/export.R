@@ -129,9 +129,25 @@ ci_check_counts <- function(f, name, exempt = character()) {
   invisible(TRUE)
 }
 
+# Keep the rows of the named sources. Run-level frames (context, environment,
+# folder listing) are kept; provenance only with its own source.
+ci_select_sources <- function(fr, sources) {
+  unknown <- setdiff(sources, fr$sources$source)
+  if (length(unknown)) stop("Not in the INTERNAL result: ", paste(unknown, collapse = ", "))
+  out <- lapply(names(fr), function(k) {
+    f <- fr[[k]]
+    if (is.data.frame(f) && "source" %in% names(f)) return(f[f$source %in% sources, , drop = FALSE])
+    if (k == "provenance" && !"provenance" %in% sources) return(NULL)
+    f
+  })
+  stats::setNames(out, names(fr))
+}
+
 #' Write the disclosure-controlled candidate from an INTERNAL inventory.
-ci_prepare_export <- function(internal = "clinical-inventory-INTERNAL",
-                              output = "clinical-inventory-v1-candidate") {
+#' With `sources`, the candidate holds only those sources (a supplement to an
+#' earlier candidate), with the run's context, environment and folder listing.
+ci_prepare_export <- function(internal = Sys.getenv("REACT_CI_INTERNAL", "clinical-inventory-INTERNAL"),
+                              output = "clinical-inventory-v1.1-candidate", sources = NULL) {
   x <- readRDS(file.path(internal, "clinical-inventory-INTERNAL.rds"))
   if (!identical(x$version, ci_version)) stop("The INTERNAL result is from a different kit version.")
   if (dir.exists(output) && length(list.files(output, all.files = TRUE, no.. = TRUE))) {
@@ -142,6 +158,7 @@ ci_prepare_export <- function(internal = "clinical-inventory-INTERNAL",
   dir.create(inv_dir, recursive = TRUE, showWarnings = FALSE)
   dir.create(pro_dir, recursive = TRUE, showWarnings = FALSE)
   fr <- x$frames
+  if (!is.null(sources)) fr <- ci_select_sources(fr, sources)
   get <- function(k) fr[[k]]
 
   tables <- get("tables")
@@ -157,6 +174,7 @@ ci_prepare_export <- function(internal = "clinical-inventory-INTERNAL",
     columns$n_distinct <- ifelse(levels_ok, columns$n_distinct, ci_protect(columns$n_distinct))
     columns$n_nonmissing <- ci_protect(columns$n_nonmissing)
     columns$n_missing <- ci_protect(columns$n_missing)
+    if ("n_recoded" %in% names(columns)) columns$n_recoded <- ci_protect(columns$n_recoded)
   }
   structure <- get("structure")
   if (!is.null(structure)) structure$n_rows <- ci_protect(structure$n_rows)
@@ -166,7 +184,8 @@ ci_prepare_export <- function(internal = "clinical-inventory-INTERNAL",
     discovery$entry <- ci_mask_name(discovery$entry)
     collapsed <- discovery$kind == "files"
     discovery$n_files[collapsed] <- ci_round(discovery$n_files[collapsed])
-    discovery$entry[collapsed] <- sub("^<[0-9]+ ", paste0("<~", discovery$n_files[collapsed], " "), discovery$entry[collapsed])
+    approx <- ifelse(discovery$n_files[collapsed] > 0, paste0("~", discovery$n_files[collapsed]), "under 5")
+    discovery$entry[collapsed] <- paste0("<", approx, " ", sub("^<[0-9]+ ", "", discovery$entry[collapsed]))
   }
   id_sets <- get("id_sets")
   if (!is.null(id_sets)) { id_sets$n <- ci_protect(id_sets$n); id_sets$n_main <- ci_protect(id_sets$n_main) }
@@ -177,13 +196,18 @@ ci_prepare_export <- function(internal = "clinical-inventory-INTERNAL",
   categorical <- ci_protect_categorical(ci_drop_structure_only(get("categorical"), small))
   date_summary <- ci_drop_structure_only(get("date_summary"), small)
   if (!is.null(date_summary) && nrow(date_summary)) {
-    n <- date_summary$n
+    # quantiles rest on the dates that are not placeholders (v1 rows: all dates)
+    n <- if ("n_quantile" %in% names(date_summary)) ifelse(is.na(date_summary$n_quantile), date_summary$n,
+      date_summary$n_quantile) else date_summary$n
     for (q in grep("^p[0-9]{2}$", names(date_summary), value = TRUE)) {
       p <- as.numeric(substring(q, 2L)) / 100
       ok <- n >= ci_min_numeric_n & n * p >= ci_min_cell & n * (1 - p) >= ci_min_cell
       date_summary[[q]] <- ifelse(ok, format(as.Date(date_summary[[q]]), "%Y-%m"), NA)
     }
-    for (col in c("n", "n_before_2019_12", "n_after_run_date")) date_summary[[col]] <- ci_protect(date_summary[[col]])
+    date_summary$n_quantile <- NULL
+    for (col in intersect(c("n", "n_placeholder", "n_before_2019_12", "n_after_run_date"), names(date_summary))) {
+      date_summary[[col]] <- ci_protect(date_summary[[col]])
+    }
   }
   correlations <- get("correlations")
   if (!is.null(correlations) && nrow(correlations)) {
@@ -251,7 +275,8 @@ ci_prepare_export <- function(internal = "clinical-inventory-INTERNAL",
   pick <- function(kind) if (is.null(categorical)) NULL else
     categorical[categorical$kind == kind, setdiff(names(categorical), "kind"), drop = FALSE]
   inventory <- list(
-    "00_sources.csv" = get("sources"), "01_context.csv" = get("context"), "02_structure.csv" = structure,
+    "00_sources.csv" = get("sources"), "00_source_issues.csv" = if (is.null(get("issues"))) ci_frame(source = character(), step = character(),
+      message = character()) else get("issues"), "01_context.csv" = get("context"), "02_structure.csv" = structure,
     "03_tables.csv" = tables, "04_columns.csv" = columns, "05_discovery.csv" = discovery,
     "06_environment.csv" = get("environment"), "07_provenance.csv" = get("provenance"),
     "08_id_sets.csv" = id_sets, "09_id_overlaps.csv" = id_overlaps)
@@ -269,9 +294,12 @@ ci_prepare_export <- function(internal = "clinical-inventory-INTERNAL",
   manifest <- ci_bind(c(lapply(names(inventory), function(n) ci_write(inventory[[n]], inv_dir, n)),
     lapply(names(profile), function(n) ci_write(profile[[n]], pro_dir, n))))
   utils::write.csv(manifest, file.path(output, "manifest.csv"), row.names = FALSE)
+  scope <- if (is.null(sources)) "All sources." else c(
+    paste0("Supplement: only these sources: ", paste(sources, collapse = ", "), "."),
+    "Their rows replace those of the same sources in the earlier candidate; other sources are unchanged.")
   writeLines(c(paste0("Clinical cohort inventory candidate (", ci_version, ")"),
     paste0("INTERNAL run created: ", x$created, "; candidate written: ", format(Sys.time(), "%Y-%m-%d %H:%M")),
-    "", "Blank count cells are suppressed (fewer than 10, or hidden so that a suppressed cell cannot be recovered).",
+    scope, "", "Blank count cells are suppressed (fewer than 10, or hidden so that a suppressed cell cannot be recovered).",
     "Counts are rounded to 5. Quantiles need 30 values and 10 on each side. No minima, maxima, means or SDs.",
     "Category labels appear only when shared by at least 10 people.",
     "inventory/ can be reviewed and released on its own; profile/ holds the distributions.",
