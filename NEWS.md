@@ -1,3 +1,21 @@
+# reactextract 0.6.0.9010 (development)
+
+- Adds an enclave kit, `inst/enclave/clinical-inventory-v1`, that inventories
+  and profiles the REACT Clinical Study: every table in the wrangled release
+  from the clinical pipeline, the proteomics, metabolomics, lipid,
+  transcriptomics, autoantibody and genomics sample files, the later
+  questionnaires, Cognitron and the linked NHS extracts. It reads files only,
+  with no database connection. It writes an inventory (structure, sizes,
+  completeness) and a profile (quantiles, category counts, anchored summaries,
+  rank correlations, timing, availability patterns and omics structure). Both
+  are disclosure-controlled for output checking: counts below 10 suppressed
+  with complementary suppression, rounding to 5, no minima, maxima, means or
+  SDs, and labels only when shared by at least 10 people. A self-test runs the
+  kit on invented data and checks that no invented identifier, free text,
+  rare level or extreme value reaches the output.
+  `scripts/build_clinical_inventory_kit.R` writes the checksums and the
+  transfer zip. The package code is unchanged.
+
 # reactextract 0.6.0.9009 (development)
 
 - Documents how the synthetic relationships combine. Synthetic hospital records
