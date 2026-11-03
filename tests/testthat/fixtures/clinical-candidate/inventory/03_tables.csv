@@ -1,0 +1,7 @@
+"source","table","visit","n_rows","n_rows_source","n_cols","has_persons","person_level","n_persons","n_persons_main","n_rows_no_person","profile_level","rpp_1","rpp_2","rpp_3_5","rpp_6_10","rpp_11_plus"
+"wrangled","registration_data",,400,,15,TRUE,TRUE,400,300,,"full",400,,,,
+"wrangled","clinic_data/clinical_tests/tests_t0","t0",300,,10,TRUE,TRUE,300,300,,"full",300,,,,
+"wrangled","clinic_data/clinical_tests/tests_t1","t1",60,,4,TRUE,TRUE,60,60,,"full",60,,,,
+"wrangled","health_survey/survey_t0","t0",280,,5,TRUE,TRUE,280,270,,"full",280,,,,
+"wrangled","health_survey/dictionary",,50,,3,FALSE,FALSE,,,,"full",,,,,
+"wrangled","react_records",,450,,4,TRUE,FALSE,390,300,,"full",330,60,,,

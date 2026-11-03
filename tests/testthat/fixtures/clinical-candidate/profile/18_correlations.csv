@@ -1,0 +1,5 @@
+"source","scope","var1","var2","rho","n"
+"wrangled","clinic_data/clinical_tests/tests_t0","sys_bp","dia_bp",0.7,295
+"wrangled","clinic_data/clinical_tests/tests_t0","body_weight","sys_bp",0.2,290
+"wrangled","health_survey/survey_t0","mood_score","sleep_hours",-0.4,255
+"wrangled","clinic_data/clinical_tests/tests_t1","sys_bp","dia_bp",0.65,60

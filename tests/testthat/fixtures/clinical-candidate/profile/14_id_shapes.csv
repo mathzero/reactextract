@@ -1,0 +1,8 @@
+"source","table","column","stratum_var","stratum","level","level_order","n_rows","n_persons"
+"wrangled","registration_data","subject_id","all","all","999999999",1,400,400
+"wrangled","registration_data","reg_code","all","all","AA9999",1,400,400
+"wrangled","clinic_data/clinical_tests/tests_t0","reg_code","all","all","AA9999",1,300,300
+"wrangled","registration_data","when_text","all","all","99/99/9999",1,150,150
+"wrangled","registration_data","when_text","all","all","AAA 9999",2,50,50
+"wrangled","health_survey/dictionary","variable","all","all","AAAA9",1,30,30
+"wrangled","health_survey/dictionary","variable","all","all","AAAAA",2,20,20

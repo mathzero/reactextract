@@ -1,0 +1,7 @@
+"source","path","class","n_rows","n_cols"
+"wrangled","registration_data","tbl_df/tbl/data.frame",400,15
+"wrangled","clinic_data/clinical_tests/tests_t0","tbl_df/tbl/data.frame",300,10
+"wrangled","clinic_data/clinical_tests/tests_t1","data.frame",60,4
+"wrangled","health_survey/survey_t0","tbl_df/tbl/data.frame",280,5
+"wrangled","health_survey/dictionary","data.frame",50,3
+"wrangled","react_records","data.table/data.frame",450,4

@@ -1,3 +1,22 @@
+# reactextract 0.6.0.9010 (development)
+
+- Starts the REACT Clinical Study generator (draft). `react_clinical()`
+  returns the Clinical Study's wrangled release, the nested list saved as
+  `ge_lc_wrangled.rds`: synthetic tables from `react_synthetic()`, or the real
+  list from the new `react_wrangled()` source, which can also be checked
+  against a profile's inventory. Synthetic tables copy the inventory's table
+  paths, column names, order and classes. The cohort is drawn from the
+  source's synthetic people, and each `subject_id` is a nine-digit number made
+  from the person's `SUBJECT_ID`. Values follow the profile's distributions
+  within sex, age group, long COVID group, main-cohort membership and the
+  other anchors, columns of one table follow its rank correlations, and
+  tables of one visit nest. `react_clinical_profile()` reads the checked
+  output of the clinical inventory kit from a local folder
+  (`REACTEXTRACT_CLINICAL_PROFILE`, with an optional v1.1 supplement); no
+  profile is bundled until one is approved. Tests use an invented candidate.
+  `inst/CLINICAL_SYNTHETIC.md` sets out the design and what waits for the
+  kit's v1.1 supplement.
+
 # reactextract 0.6.0.9009 (development)
 
 - Documents how the synthetic relationships combine. Synthetic hospital records
