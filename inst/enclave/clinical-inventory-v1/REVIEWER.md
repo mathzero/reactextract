@@ -4,35 +4,43 @@ The candidate describes the REACT Clinical Study's wrangled datasets and omics
 files. It contains aggregate tables only: no participant identifiers, sample
 barcodes, free text, dates of birth, postcodes, or individual values.
 
-## The v1.1 supplement
+## The v1.2 candidate
 
-`clinical-inventory-v1.1-supplement-candidate` holds nine sources only:
-`wrangled`, `master`, `proteomics`, `metabolomics_rpos`, `metabolomics_rneg`,
-`metabolomics_xcms`, `transcriptomics_t0`, `transcriptomics_t1` and `apoe4`.
-The first seven stopped on kit bugs in the first run, so the first candidate
-held their tables only up to the point of failure. The last two are new. The
-rows for these nine replace their rows in the first candidate. The rules are
-the same, so where a table was profiled the same way in both runs, its rows
-are identical. Differences come from the v1.1 fixes:
+`clinical-inventory-v1.2-candidate` covers every source in one run of one kit
+version. It replaces the two earlier releases: the first candidate
+(2 November 2026, 16 of 23 sources) and the v1.1 supplement (3 November 2026,
+nine sources). The rules are the same, so where the data haven't changed,
+most rows match the earlier releases. Differences come from these changes:
 
-- `evbirth` and `numbirth` (births) are now profiled; they were withheld as
-  if they were dates of birth;
+- `evbirth` and `numbirth` (births) are profiled; v1 withheld them as if they
+  were dates of birth;
 - dates stored as text are profiled as dates (months and quantiles) rather
-  than as text;
-- placeholder dates (such as 1582-10-14, the SPSS zero date) are counted in
-  `n_placeholder` and left out of date quantiles. The count of dates that the
-  quantiles use is not written, so it can't be subtracted from `n` to recover
-  a suppressed placeholder count;
+  than as text. In v1 this affected `cognitron_1` and `followup_2025` too;
+- placeholder dates are any date up to 1900-01-01 or in the year 9999 (the
+  SPSS zero date in October 1582, 0001-01-01, 1800-01-01, 1801-01-01). They
+  are counted in `n_placeholder` and left out of date quantiles. The count of
+  dates that the quantiles use is not written, so it can't be subtracted from
+  `n` to recover a suppressed placeholder count. In the earlier releases the
+  placeholders were in the quantiles;
 - `n_recoded` in `04_columns.csv` counts text values converted from
   Windows-1252, with the usual count protection;
 - each proteomics table is profiled with its declared columns. Where a table
   has both a raw and a normalised value, both are profiled as separate
-  platforms (`alamar:npq`, `alamar:npq_normalised`).
+  platforms (`alamar:npq`, `alamar:npq_normalised`). The proteomics lookup and
+  QC tables are profiled as ordinary tables, under the same rules;
+- `inventory/04b_source_columns.csv` is new. It lists the columns of each
+  long omics table in their original order, with their class: names only,
+  no values. The same names already appear in `04_columns.csv`.
 
 The untargeted XCMS table has no sample IDs, so its profile is not linked to
 people: it has no breakdowns by anchor. The APOE4 file is linked to cohort
 members through the genotyping sample wells. Its categories follow the usual
 10-person label rule.
+
+Because this candidate overlaps the earlier releases, review it with them in
+mind: where a count was suppressed in one release and shown in another, the
+two could be compared. Rows for unchanged data are produced the same way
+each time, so they match; changed rows come from the list above.
 
 ## Protections applied by the kit
 

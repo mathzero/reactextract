@@ -111,7 +111,9 @@ ci_fixture_tree <- function(root, n = 600L, seed = 20261102L) {
   rounds$add_comm <- NA_character_
   rounds$add_comm[sample(nrow(rounds), 150)] <- paste(pick(cp1252, 150), seq_len(150))
   rounds$react_infection_date_raw <- as.Date("2020-09-01") + pick(0:500, nrow(rounds))
-  rounds$react_infection_date_raw[sample(nrow(rounds), 40)] <- as.Date("1582-10-14")
+  # placeholders as found in the enclave: the SPSS zero date a day early, and 0001-01-01
+  placeholder_rows <- sample(nrow(rounds), 40)
+  rounds$react_infection_date_raw[placeholder_rows] <- as.Date(rep(c("1582-10-13", "0001-01-01"), each = 20))
   vaccines <- do.call(rbind, lapply(subject[seq_len(round(n * 0.8))], function(s) {
     k <- sample(1:4, 1)
     data.frame(subject_id = s, recorded_date = as.Date("2021-01-01") + sort(sample(0:500, k)),
@@ -221,7 +223,13 @@ ci_fixture_tree <- function(root, n = 600L, seed = 20261102L) {
     timepoint = d$timepoint, protein_cleaned = d$protein_cleaned, value = d[[value]], stringsAsFactors = FALSE)
   allplats <- rbind(stack(olink, "Olink", "npx"), stack(alamar, "Alamar", "npq"), stack(lcms_long, "LC-MS", "value"))
   allplats$protein_name <- ifelse(allplats$platform == "Alamar", allplats$protein_cleaned, NA)
-  proteomics <- list(df_allplats = allplats, df_olink = olink, df_alamar = alamar, df_lcms = lcms, df_lcms_long = lcms_long)
+  # a protein lookup and a QC log beside the omics tables
+  prot_names <- unique(allplats[c("platform", "protein_cleaned")])
+  prot_names$protein_label <- toupper(prot_names$protein_cleaned)
+  qc_log <- data.frame(sample_id = unique(olink$sample_id), plate_id = pick(sprintf("Plate%d", 1:4), length(unique(olink$sample_id))),
+    qc_status = pick(c("PASS", "PASS", "WARN"), length(unique(olink$sample_id))), stringsAsFactors = FALSE)
+  proteomics <- list(df_allplats = allplats, df_olink = olink, df_alamar = alamar, df_lcms = lcms, df_lcms_long = lcms_long,
+    prot_names_lookup = prot_names, qc_log = qc_log)
   saveRDS(proteomics, file.path(omics, "olink_alamar_lcms_combined.rds"))
 
   # metabolomics: an unnamed row-number column, 21 metadata columns, then

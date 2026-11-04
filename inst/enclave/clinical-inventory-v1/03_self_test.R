@@ -2,8 +2,8 @@
 # candidate: every count protected, and no invented identifier or planted
 # sentinel (free text, rare level, extreme value, one-person month) exported.
 # It also checks the v1.1 repairs on the layouts that stopped the first
-# enclave run, and the supplement run and export. Reads no real data. Run it
-# locally and once in the enclave before 01.
+# enclave run, the v1.2 additions, and checkpoint reuse. Reads no real data.
+# Run it locally and once in the enclave before 01.
 source("00_load.R")
 source("fixtures.R")
 root <- file.path(Sys.getenv("CI_SELF_TEST_DIR", tempdir()), paste0("ci-self-test-", format(Sys.time(), "%Y%m%d%H%M%S")))
@@ -63,9 +63,12 @@ if (!identical(role("original_react_data", "add_comm"), "free_text")) stop("Wind
 if (!all(is.finite(columns$n_recoded[columns$column == "add_comm"]))) stop("Recoded text not counted.")
 if (identical(role("health_survey/survey_t0", "evbirth"), "withheld")) stop("evbirth withheld as a birth date.")
 if (!identical(role("registration_data", "symptoms_date_other"), "date")) stop("Dates held as text not read as dates.")
+# v1.2: every date up to 1900 counts as a placeholder and stays out of the quantiles
 dates <- read("profile", "12_date_summary.csv")
-placeholder <- dates$n_placeholder[dates$column == "react_infection_date_raw"]
-if (!length(placeholder) || is.na(placeholder[1])) stop("Placeholder dates not counted.")
+raw <- dates[dates$column == "react_infection_date_raw", ]
+if (!nrow(raw) || !identical(as.numeric(raw$n_placeholder[1]), 40)) stop("Placeholder dates not counted.")
+early <- unlist(raw[grep("^p[0-9]{2}$", names(raw))])
+if (any(!is.na(early) & nzchar(early) & early < "1900")) stop("Placeholder dates in the date quantiles.")
 
 # v1.1: proteomics layouts, metabolomics names, RNA-seq mapping, new sources
 platform <- read("profile", "30_omics_platform.csv")
@@ -80,6 +83,14 @@ if (xlsx && (any(is.na(rna$n_samples_mapped)) || !any(read("profile", "35_omics_
   stop("RNA-seq samples not mapped to people through the manifests.")
 }
 if (!any(tables$source == "apoe4" & tables$person_key == "IID via genomics")) stop("APOE4 not linked through the genotyping wells.")
+# v1.2: lookup and QC tables profiled as tables; long tables keep their column order
+if (!all(c("prot_names_lookup", "qc_log") %in% tables$table[tables$source == "proteomics"])) {
+  stop("Proteomics lookup and QC tables not profiled.")
+}
+order <- read("inventory", "04b_source_columns.csv")
+alamar_cols <- order$column[order$table == "alamar"][order(order$position[order$table == "alamar"])]
+if (!identical(alamar_cols, names(readRDS(file.path(fx$saved_root, "ge_lc", "ge_lc_omics_objects",
+  "olink_alamar_lcms_combined.rds"))$df_alamar))) stop("Source column order of long omics tables not recorded.")
 discovery <- read("inventory", "05_discovery.csv")
 collapsed <- discovery[discovery$kind == "files", ]
 if (!nrow(collapsed) || !all(startsWith(collapsed$entry, ifelse(collapsed$n_files > 0,
@@ -97,20 +108,33 @@ if (is.null(xr$omics_platform) || xr$omics_platform$n_samples != 60 || xr$omics_
   stop("XCMS features-in-rows layout not read.")
 }
 
-# v1.1 supplement: a failed checkpoint is profiled again, a partial run keeps
-# every other source, and the supplement holds only its sources
+# Checkpoints: a failed one, or one from an earlier kit version, is profiled
+# again; a finished one is reused; a partial run keeps every other source; an
+# export can be limited to some sources
+stamp <- function(id) readRDS(file.path(internal, paste0("source_", id, ".rds")))$record$seconds
 cp_file <- file.path(internal, "source_lipids.rds")
 cp <- readRDS(cp_file)
 cp$record$status <- "error"
 saveRDS(cp, cp_file)
-again <- ci_run(fx$saved_root, fx$data_root, fx$project_root, internal = internal, sources = c("lipids", "proteomics"),
-  rerun = "proteomics", progress = FALSE, discover = FALSE)
+cp_file <- file.path(internal, "source_apoe4.rds")
+cp <- readRDS(cp_file)
+cp$kit <- "clinical-inventory-v1.1"
+cp$record$seconds <- -1
+saveRDS(cp, cp_file)
+cp_file <- file.path(internal, "source_cognitron_1.rds")
+cp <- readRDS(cp_file)
+cp$record$seconds <- -1
+saveRDS(cp, cp_file)
+again <- ci_run(fx$saved_root, fx$data_root, fx$project_root, internal = internal,
+  sources = c("lipids", "proteomics", "apoe4", "cognitron_1"), rerun = "proteomics", progress = FALSE, discover = FALSE)
 if (!identical(again$frames$sources$status[again$frames$sources$source == "lipids"], "ok")) stop("A failed checkpoint was reused.")
+if (identical(stamp("apoe4"), -1)) stop("A checkpoint from an earlier kit version was reused.")
+if (!identical(stamp("cognitron_1"), -1)) stop("A finished checkpoint was profiled again.")
 if (!setequal(again$frames$sources$source, src$source)) stop("A partial run dropped other sources.")
-supplement <- file.path(root, "supplement")
-ci_prepare_export(internal, supplement, sources = ci_supplement_sources)
-sup <- read("inventory", "00_sources.csv", supplement)
-if (!setequal(sup$source, ci_supplement_sources)) stop("The supplement holds other sources.")
-if (any(!read("profile", "10_numeric.csv", supplement)$source %in% ci_supplement_sources)) stop("Supplement rows from other sources.")
+some <- c("lipids", "proteomics")
+subset_dir <- file.path(root, "subset")
+ci_prepare_export(internal, subset_dir, sources = some)
+if (!setequal(read("inventory", "00_sources.csv", subset_dir)$source, some)) stop("A limited export holds other sources.")
+if (any(!read("profile", "10_numeric.csv", subset_dir)$source %in% some)) stop("Limited export rows from other sources.")
 message("Self-test passed: ", length(files), " candidate files, ", nrow(src), " sources",
   if (!xlsx) " (workbook sources skipped: openxlsx not installed)" else "", ". Files in ", root)

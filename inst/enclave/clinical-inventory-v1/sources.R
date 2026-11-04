@@ -11,7 +11,8 @@
 #   sample_col   omics sample key; feature_from: first feature column
 #   layouts      per table of an omics list: feature, value (each value
 #                column is profiled as its own platform), sample, split, or
-#                type = "wide"
+#                type = "wide"; type = "table" profiles a lookup or QC table
+#                as an ordinary table
 #   cohort_only  profile only rows that map to the main cohort (sources that
 #                cover REACT participants outside the Clinical Study)
 #   na           strings read as missing from a CSV ("" as well, as read_csv())
@@ -50,7 +51,10 @@ ci_sources <- function(s) {
         alamar = list(feature = "protein_cleaned", value = c("npq", "npq_normalised"), sample = "sample_id"),
         lcms = list(type = "wide", sample = "sample_name"),
         lcms_long = list(feature = "protein_cleaned", value = c("value", "value_normalised"),
-          sample = c("sample_id", "sample_name")))),
+          sample = c("sample_id", "sample_name")),
+        prot_names_lookup = list(type = "table"), prot_summary = list(type = "table"),
+        olink_missing_summary = list(type = "table"), alamar_detectability = list(type = "table"),
+        qc_log = list(type = "table"))),
     list(id = "metabolomics_rpos", group = "omics", reader = "omics_csv", path = metab_file("RPOS"),
       sample_col = "Sample ID", feature_from = 23L, map_via = "lookup", na = c("", "NA")),
     list(id = "metabolomics_rneg", group = "omics", reader = "omics_csv", path = metab_file("RNEG"),
@@ -111,11 +115,6 @@ ci_sources <- function(s) {
 ci_genomics_lookup <- function(s) {
   file.path(s$data_root, "genomics", "genomics", "data", "REACT_Covid19_DNA_Sample_LPIDs-1.tsv")
 }
-
-# Sources profiled and exported by the v1.1 supplement: the seven that failed
-# in the first enclave run (2 November 2026) and the two added in v1.1.
-ci_supplement_sources <- c("wrangled", "master", "proteomics", "metabolomics_rpos", "metabolomics_rneg",
-  "metabolomics_xcms", "transcriptomics_t0", "transcriptomics_t1", "apoe4")
 
 # Person-level tables joined on subject_id for cross-domain rank correlations.
 ci_panels <- list(

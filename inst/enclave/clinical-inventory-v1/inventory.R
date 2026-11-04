@@ -1,9 +1,9 @@
-# Clinical cohort inventory and profile (clinical-inventory-v1). Base R only.
+# Clinical cohort inventory and profile (clinical-inventory-v1.2). Base R only.
 # ci_run() reads one source at a time and saves aggregates (never rows) to an
 # INTERNAL folder that stays in the enclave. Those aggregates are not yet
 # disclosure-controlled: export.R applies the rules and writes the candidate.
 
-ci_version <- "clinical-inventory-v1.1"
+ci_version <- "clinical-inventory-v1.2"
 
 ## settings ---------------------------------------------------------------------
 
@@ -33,8 +33,13 @@ ci_withheld_pattern <- paste0("(dob|(date|day|month|year|place|country)[._ ]?of[
   "birth[._ ]?(date|day|month|year|place|country)|(^|[._ ])yob($|[._ ])|postcode|post_code|address|email|",
   "phone|mobile|surname|forename|first_name|last_name|full_name|lsoa|msoa|gp_practice|ip_address|latitude|longitude)")
 ci_text_pattern <- "(text|comment|(^|[._ ])comms?($|[._ ])|specify|describe|free|other)"
-# dates that stand for "missing": the SPSS and Excel zero dates, HES and other nulls
-ci_placeholder_dates <- as.Date(c("1582-10-14", "1800-01-01", "1899-12-30", "1900-01-01", "9999-12-31"))
+# Dates that stand for "missing": up to 1900-01-01, or in the year 9999. This
+# covers the SPSS zero date (October 1582, a day either side after time-zone
+# conversion), 0001-01-01, HES's 1800-01-01 and 1801-01-01 and Excel's
+# 1899-12-30. No real date in these data is that early.
+ci_placeholder_last <- as.Date("1900-01-01")
+ci_placeholder_from <- as.Date("9999-01-01")
+ci_is_placeholder <- function(d) d <= ci_placeholder_last | d >= ci_placeholder_from
 
 ## small helpers -----------------------------------------------------------------
 
@@ -282,7 +287,7 @@ ci_counts <- function(x, persons = NULL, lev = NULL) {
 # suppressed placeholder count.
 ci_date_summary <- function(d) {
   v <- d[!is.na(d)]
-  real <- v[!v %in% ci_placeholder_dates]
+  real <- v[!ci_is_placeholder(v)]
   q <- if (length(real)) as.Date(stats::quantile(as.numeric(real), ci_probs, names = FALSE, type = 1),
     origin = "1970-01-01") else as.Date(rep(NA_character_, length(ci_probs)))
   out <- ci_frame(n = length(v), n_placeholder = length(v) - length(real), n_quantile = length(real),
@@ -828,6 +833,9 @@ ci_omics_long <- function(res, source, platform, df, src, ctx, feature_col, valu
   if (is.na(sample_col) && is.na(subj_j)) stop("long layout for ", platform, ": no sample or subject_id column")
   key <- if (!is.na(sample_col)) ci_key(df[[sample_col]]) else paste(ci_key(df[[subj_j]]), ci_visit(df), sep = "|")
   feat <- as.character(ci_fix_text(df[[feature_col]]))
+  # the source table's column order, which the samples and long_rows tables lose
+  ci_put(res, "source_columns", ci_frame(source = source, table = platform, position = seq_along(nm),
+    column = nm, class = vapply(df, function(z) class(z)[1], "")))
   # sample metadata: columns constant within sample (checked on a subset)
   check <- which(key %in% utils::head(unique(key[!is.na(key)]), 200L))
   const <- vapply(setdiff(nm, c(value_cols, feature_col)), function(col) {
@@ -1080,9 +1088,16 @@ ci_read_omics_list <- function(res, src, ctx) {
     if (!is.data.frame(x[[name]])) next
     platform <- sub("^df_", "", name)
     layout <- src$layouts[[platform]]
-    if (!is.null(src$layouts) && is.null(layout)) ci_put(res, "issues", ci_frame(source = src$id, step = platform,
-      message = "no layout declared in sources.R; columns recognised by name"))
-    ci_try(res, src$id, platform, ci_omics_from_table(res, src$id, platform, x[[name]], src, ctx, layout))
+    undeclared <- !is.null(src$layouts) && is.null(layout)
+    # lookup, summary and QC tables, and any sources.R doesn't declare, are
+    # profiled as ordinary tables
+    if (undeclared) ci_put(res, "issues", ci_frame(source = src$id, step = platform,
+      message = "no layout declared in sources.R; profiled as an ordinary table"))
+    if (undeclared || identical(layout$type, "table")) {
+      ci_try(res, src$id, platform, ci_profile_frame(res, x[[name]], src, platform, ctx))
+    } else {
+      ci_try(res, src$id, platform, ci_omics_from_table(res, src$id, platform, x[[name]], src, ctx, layout))
+    }
     x[[name]] <- list()
     invisible(gc())
   }
@@ -1448,12 +1463,14 @@ ci_environment <- function() {
 
 ## run -------------------------------------------------------------------------------
 
-# A checkpoint is reused only if its input files are unchanged and it
-# finished: a source that failed, wholly or in part, is profiled again.
+# A checkpoint is reused only if this kit version wrote it, its input files
+# are unchanged and it finished: a source that failed, wholly or in part, or
+# that an earlier kit version profiled, is profiled again.
 ci_reusable <- function(file, identity) {
   if (!file.exists(file)) return(FALSE)
   cp <- tryCatch(readRDS(file), error = function(e) NULL)
-  !is.null(cp) && identical(cp$identity, identity) && isTRUE(cp$record$status %in% c("ok", "missing"))
+  !is.null(cp) && identical(cp$kit, ci_version) && identical(cp$identity, identity) &&
+    isTRUE(cp$record$status %in% c("ok", "missing"))
 }
 
 #' Run the inventory. Each source is checkpointed in `internal`; with

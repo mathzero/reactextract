@@ -1,4 +1,4 @@
-# Clinical cohort inventory: enclave run kit (clinical-inventory-v1.1)
+# Clinical cohort inventory: enclave run kit (clinical-inventory-v1.2)
 
 This kit describes every dataset held for the REACT Clinical Study, so that
 code, and later synthetic data, can be developed outside the enclave. It reads
@@ -11,45 +11,45 @@ structure), both protected for output checking.
 It reads files only. It does not connect to the database, change any file it
 reads, or write row-level data.
 
-## Version 1.1: the supplement run
+## Version 1.2: one full run
 
-The first enclave run (2 November 2026) profiled 16 of its 23 sources. Seven
-stopped on kit bugs, none of them caused by the data:
+v1.2 profiles every source afresh and writes one candidate,
+`clinical-inventory-v1.2-candidate`. Once released, it replaces both earlier
+candidates: v1's (2 November 2026, 16 of 23 sources) and the v1.1 supplement
+(3 November 2026, the seven sources that had failed plus XCMS and APOE4).
+v1.1 fixed the failures:
 
-- `wrangled` and `master` stopped on Windows-1252 characters in free text
-  (`add_comm`). Text that is not valid UTF-8 is now converted from
-  Windows-1252 on reading, and the count of converted values is reported per
-  column. Each column, table and cross-table step is now profiled on its own,
-  so an error in one is recorded in `00_source_issues.csv` and the rest still
-  run (status `partial`).
-- `proteomics` stopped because columns were guessed. `sources.R` now declares
-  each table's feature, value and sample columns. Alamar NPQ and LC-MS values
-  are profiled both raw and normalised, and `df_allplats` is profiled per
-  platform.
-- `metabolomics_rpos` and `_rneg` stopped on the CSVs' unnamed first column.
-  Names are now repaired as `read_csv()` repairs them (`...1`).
-- `transcriptomics_t0` and `_t1` could not link samples to people: the
-  matrices' columns are BioSample names. The manifests now map them to
-  sample barcodes, as `code/07` does.
+- Windows-1252 free text is converted on reading, with the count of converted
+  values reported per column. Each column, table and cross-table step runs on
+  its own, so an error in one is recorded in `00_source_issues.csv` and the
+  rest still run (status `partial`).
+- `sources.R` declares each proteomics table's feature, value and sample
+  columns. Raw and normalised values are profiled as separate platforms, and
+  `df_allplats` per platform.
+- CSV column names are repaired as `read_csv()` repairs them (`...1`).
+- RNA-seq columns (BioSample names) are linked to sample barcodes through the
+  manifests.
+- The folder listing gives each collapsed folder its own count, `evbirth` and
+  `numbirth` are profiled, and dates stored as text are profiled as dates.
 
-v1.1 also adds two sources: the untargeted XCMS metabolomics table, which has
-no sample IDs and is profiled without linking samples to people, and the
-APOE4 carrier file. It also fixes four smaller problems:
+v1.2 adds:
 
-- the folder listing gave every collapsed folder the first folder's count;
-- `evbirth` and `numbirth` were withheld as if they were dates of birth;
-- dates stored as text are now profiled as dates;
-- placeholder dates (1582-10-14, the SPSS zero date, and similar) are now
-  counted and left out of date quantiles.
+- **Placeholder dates by range.** Any date up to 1900-01-01, or in the year
+  9999, counts as a placeholder and is left out of date quantiles. v1.1
+  listed exact days, and the enclave's SPSS zero dates fell a day away from
+  1582-10-14, so none were caught; nor were 0001-01-01 and HES's 1801-01-01.
+- **Lookup and QC tables.** The proteomics list's `prot_names_lookup`,
+  `prot_summary`, `olink_missing_summary`, `alamar_detectability` and
+  `qc_log` are profiled as ordinary tables.
+- **Column order of long omics tables**, in `inventory/04b_source_columns.csv`,
+  so that synthetic tables can match it.
+- **No reuse across versions.** A checkpoint is reused only if this kit
+  version wrote it, so a v1.2 run never mixes in v1 or v1.1 results.
+  `02_prepare_export.R` stops if any source was profiled by an earlier
+  version.
 
-**Run v1.1 in the same folder as v1**, or set `REACT_CI_INTERNAL` to the first
-run's `clinical-inventory-INTERNAL` folder. `01_run_inventory.R` profiles
-only the nine sources in `ci_supplement_sources` and keeps the first run's
-checkpoints for the other 16. `02_prepare_export.R` writes
-`clinical-inventory-v1.1-supplement-candidate`, which holds those nine
-sources only. Their rows replace the same sources in the first candidate.
-For a full run, use `ci_run(sources = "all")` and
-`ci_prepare_export(sources = NULL)`.
+A full run also applies v1.1's text-date fix to sources the supplement didn't
+rerun: `cognitron_1`'s `test_date` and `followup_2025`'s `_DATE_OTHER` columns.
 
 ## Before running
 
@@ -61,7 +61,8 @@ For a full run, use `ci_run(sources = "all")` and
 - The revised pipeline must have run (stage 01, then stage 02). The kit reads
   `ge_lc_wrangled.rds`, `combined_data_set.rds`, `ge_lc_sample_lookup.rds` and
   `cohort_availability_sets.rds` from `REACT_DATA_ROOT/metadata`.
-- Copy the complete kit folder into the enclave and don't edit its files:
+- Unzip the kit into a new, empty folder in the enclave (for example under
+  `D:/projects`), not into an earlier kit's folder, and don't edit its files:
   `00_load.R` checks each one against `kit-checksums.csv`.
 
 ## Run
@@ -79,8 +80,8 @@ before the real run, to confirm that the kit works with the enclave's R.
 
 ```r
 Sys.setenv(REACT_GELC_PROJECT = "D:/path/to/react_ge_lc_wrangle")  # holds subject_ids_main_cohort.rds
-source("01_run_inventory.R")    # profiles the nine v1.1 sources; aggregates go to clinical-inventory-INTERNAL
-source("02_prepare_export.R")   # writes clinical-inventory-v1.1-supplement-candidate
+source("01_run_inventory.R")    # profiles every source; aggregates go to clinical-inventory-INTERNAL
+source("02_prepare_export.R")   # writes clinical-inventory-v1.2-candidate
 ```
 
 `REACT_SAVED_ROOT` (default `D:/saved_objects`) and `REACT_DATA_ROOT` (default
@@ -89,12 +90,11 @@ source("02_prepare_export.R")   # writes clinical-inventory-v1.1-supplement-cand
 `cohort_availability_sets.rds`, and `01_context.csv` records which route was used.
 
 Each source is saved as soon as it is done. If the run stops, start a new
-session and run `ci_run()` again: a source is reused when its input files
-have not changed (same size and modification time) and its last run
-finished. Sources that failed, wholly or in part, are profiled again.
-(`01_run_inventory.R` always reprofiles its nine sources.) The first run took
-about two hours, 76 minutes of it for `linkage_ids`. The nine-source
-supplement should take about an hour. The expression matrices
+session and source `01_run_inventory.R` again: a source is reused when this
+kit version profiled it, its input files have not changed (same size and
+modification time) and its last run finished. Sources that failed, wholly or
+in part, are profiled again. The first full run took about two hours, 76
+minutes of it for `linkage_ids`; expect about the same. The expression matrices
 (`tx_baseline.rds`, `tx_recall.rds`) need the most memory: about twice the size
 of the loaded file, since R reads each RDS whole. They are read one at a time,
 and only genes non-zero in at least 10% of samples are profiled. On invented
@@ -129,12 +129,12 @@ pipeline doesn't read, and records the R version and installed packages.
 
 ## What comes back
 
-The candidate folder (`clinical-inventory-v1.1-supplement-candidate/` for the
-v1.1 run) holds:
+The candidate folder (`clinical-inventory-v1.2-candidate/`) holds:
 
-- `inventory/`: sources and their status, steps that failed, the nested structure, every table
-  and column (type, role, completeness), the folder listing, the R environment
-  and pipeline provenance. The output checker can review and release this
+- `inventory/`: sources and their status, steps that failed, the nested
+  structure, every table and column (type, role, completeness), the column
+  order of long omics tables, the folder listing, the R environment and
+  pipeline provenance. The output checker can review and release this
   folder on its own.
 - `profile/`: quantiles of numeric columns, overall and by anchor (sex, age
   group, long COVID group, registration route, study, ethnicity, main-cohort
@@ -159,4 +159,4 @@ Request output checking for the candidate folder. **Never transfer
 - It reads no genotypes. Whole-genome data are accessed through Genomics
   England; the kit lists samples only.
 - It doesn't generate synthetic data. Its checked output is the input for the
-  Clinical Study generator planned in reactextract.
+  Clinical Study generator in reactextract (in development).

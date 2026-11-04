@@ -26,6 +26,13 @@
   run now keeps every other source's checkpoint and profiles failed sources
   again. The v1.1 run profiles only these nine sources, and its export is a
   supplement to the first candidate.
+- Clinical inventory kit v1.2 profiles every source afresh and writes one
+  candidate, which replaces the first candidate and the v1.1 supplement.
+  Checkpoints from earlier kit versions are never reused. Placeholder dates
+  are any date up to 1900-01-01 or in the year 9999, since the enclave's
+  SPSS zero dates didn't match the exact days v1.1 listed. The proteomics
+  lookup and QC tables are profiled as ordinary tables, and the column order
+  of long omics tables is recorded for the generator.
 
 # reactextract 0.6.0.9009 (development)
 

@@ -147,7 +147,7 @@ ci_select_sources <- function(fr, sources) {
 #' With `sources`, the candidate holds only those sources (a supplement to an
 #' earlier candidate), with the run's context, environment and folder listing.
 ci_prepare_export <- function(internal = Sys.getenv("REACT_CI_INTERNAL", "clinical-inventory-INTERNAL"),
-                              output = "clinical-inventory-v1.1-candidate", sources = NULL) {
+                              output = "clinical-inventory-v1.2-candidate", sources = NULL) {
   x <- readRDS(file.path(internal, "clinical-inventory-INTERNAL.rds"))
   if (!identical(x$version, ci_version)) stop("The INTERNAL result is from a different kit version.")
   if (dir.exists(output) && length(list.files(output, all.files = TRUE, no.. = TRUE))) {
@@ -277,7 +277,8 @@ ci_prepare_export <- function(internal = Sys.getenv("REACT_CI_INTERNAL", "clinic
   inventory <- list(
     "00_sources.csv" = get("sources"), "00_source_issues.csv" = if (is.null(get("issues"))) ci_frame(source = character(), step = character(),
       message = character()) else get("issues"), "01_context.csv" = get("context"), "02_structure.csv" = structure,
-    "03_tables.csv" = tables, "04_columns.csv" = columns, "05_discovery.csv" = discovery,
+    "03_tables.csv" = tables, "04_columns.csv" = columns, "04b_source_columns.csv" = get("source_columns"),
+    "05_discovery.csv" = discovery,
     "06_environment.csv" = get("environment"), "07_provenance.csv" = get("provenance"),
     "08_id_sets.csv" = id_sets, "09_id_overlaps.csv" = id_overlaps)
   profile <- list(
