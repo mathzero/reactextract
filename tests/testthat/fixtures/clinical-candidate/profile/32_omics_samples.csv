@@ -1,0 +1,2 @@
+"source","platform","stat","n","mean_trimmed","n_zero","n_negative","share_integer","decimals","p01","p05","p10","p25","p50","p75","p90","p95","p99","n_code_m77","n_code_m91","n_code_m92","n_code_m99","n_code_m66","n_code_m555","n_code_m999"
+"rnaseq_t0","rna_seq","library_size",50,,,,1,0,,1.5e+07,1.7e+07,2e+07,2.3e+07,2.6e+07,2.9e+07,3.1e+07,,,,,,,,

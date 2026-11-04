@@ -15,7 +15,8 @@ test_that("the profile reads the kit's files, including empty ones", {
   expect_s3_class(profile, "react_clinical_profile")
   expect_identical(profile$status, "local_candidate")
   expect_identical(unname(profile$anchors[["lc_group"]]), "lc_status")
-  expect_identical(nrow(profile$visit_pairs), 0L)
+  expect_identical(nrow(profile$availability_pairs), 0L)
+  expect_identical(nrow(profile$visit_pairs), 2L)
   expect_identical(nrow(profile$availability), 0L)
   expect_true(is.numeric(profile$numeric$p50))
   expect_true(is.logical(profile$tables$has_persons))
@@ -59,14 +60,17 @@ test_that("a supplement replaces the rows of the sources it lists", {
   rows <- merged$numeric[merged$numeric$column == "sys_bp" & merged$numeric$stratum_var == "all", ]
   expect_identical(sort(rows$p50), c(129, 999))
   expect_identical(nrow(merged$structure), nrow(profile$structure))
-  # files the supplement lacks lose the replaced source's rows
-  expect_identical(nrow(merged$categorical), 0L)
+  # files the supplement lacks (or left empty) keep the first run's rows
+  expect_identical(nrow(merged$categorical), nrow(profile$categorical))
 })
 
 test_that("tables have the inventory's paths, column names, order and classes", {
-  expect_named(gelc, c("registration_data", "clinic_data", "health_survey", "react_records"))
-  for (i in seq_len(nrow(profile$structure))) {
-    path <- profile$structure$path[[i]]
+  expect_named(gelc, c("registration_data", "clinic_data", "health_survey", "react_records", "infection_log",
+                       "date_rules", "test_log", "outsiders"))
+  wrangled <- profile$structure[profile$structure$source == "wrangled" &
+                                  grepl("data.frame", profile$structure$class), ]
+  for (i in seq_len(nrow(wrangled))) {
+    path <- wrangled$path[[i]]
     data <- leaf(gelc, path)
     expected <- profile$columns[profile$columns$table == path, ]
     expected <- expected[order(expected$position), ]
@@ -150,9 +154,83 @@ test_that("values follow the profile's distributions and anchors", {
 })
 
 test_that("dates come from released months or month quantiles", {
-  months <- format(t0$visit_date, "%Y-%m")
-  expect_true(all(months %in% sprintf("2021-%02d", 1:9)))
-  expect_true(all(format(t1$visit_date, "%Y-%m") %in% c("2021-10", "2021-11", "2021-12")))
+  log <- gelc$infection_log
+  expect_true(all(format(log$onset_date, "%Y-%m") %in% c(NA, "2020-04", "2020-06", "2020-10", "2020-12", "2021-01")))
+  summary <- profile$date_summary
+  dates <- .hes_with_seed(1L, .clinical_draw_dates(profile$date_months[0, ], summary, 200L))
+  expect_true(all(format(dates, "%Y-%m") %in% c("2021-10", "2021-11", "2021-12")))
+})
+
+test_that("dates in different tables follow the timing intervals", {
+  linked <- merge(as.data.frame(reg)[c("subject_id", "reg_date")], as.data.frame(t0)[c("subject_id", "visit_date")])
+  real <- linked$reg_date > as.Date("1900-01-01")
+  days <- as.numeric(linked$visit_date - linked$reg_date)[real]
+  expect_true(all(days >= 4 & days <= 58))
+  expect_lt(abs(stats::median(days) - 20), 6)
+  visits <- merge(as.data.frame(t0)[c("subject_id", "visit_date")], as.data.frame(t1)[c("subject_id", "visit_date")],
+                  by = "subject_id")
+  later <- as.numeric(visits$visit_date.y - visits$visit_date.x)
+  expect_true(all(later >= 157 & later <= 248))
+  onset <- merge(as.data.frame(gelc$infection_log)[c("subject_id", "onset_date")],
+                 as.data.frame(reg)[c("subject_id", "reg_date")])
+  onset <- onset[!is.na(onset$onset_date) & onset$reg_date > as.Date("1900-01-01"), ]
+  expect_true(all(onset$reg_date - onset$onset_date >= 0))
+})
+
+test_that("placeholder dates are kept, but don't start intervals", {
+  expect_true(as.Date("1582-10-14") %in% reg$reg_date)
+  expect_true(all(t0$visit_date > as.Date("1900-01-01")))
+  expect_identical(.clinical_placeholder_date(c("1582-10", "1899-12")), as.Date(c("1582-10-14", "1899-12-01")))
+})
+
+test_that("follow-up values are correlated with the same person's baseline values", {
+  visits <- merge(as.data.frame(t0)[c("subject_id", "sys_bp")], as.data.frame(t1)[c("subject_id", "sys_bp")],
+                  by = "subject_id")
+  expect_gt(stats::cor(visits$sys_bp.x, visits$sys_bp.y, method = "spearman", use = "complete.obs"), 0.4)
+  expect_identical(names(.clinical_visit_pairs(profile, .clinical_tables(profile))), "clinic_data/clinical_tests/tests_t1")
+})
+
+test_that("population tables cover the whole synthetic population", {
+  log <- gelc$infection_log
+  population <- react_extract(source, families = "people-households/demographics", progress = FALSE)
+  expect_identical(nrow(log), length(unique(population$data$SUBJECT_ID)))
+  expect_true(all(reg$subject_id %in% log$subject_id))
+  expect_true(.clinical_tables(profile)$population[.clinical_tables(profile)$table == "infection_log"])
+})
+
+test_that("branches have their own people and borrow the profile they mirror", {
+  outsiders <- gelc$outsiders$registration_data
+  expect_identical(nrow(outsiders), 10L)
+  expect_true(all(outsiders$subject_id > 9e8))
+  expect_false(any(outsiders$subject_id %in% reg$subject_id))
+  expect_true(all(outsiders$fatigue %in% c(NA, "Never", "Sometimes", "Often")))
+  expect_true(any(!is.na(outsiders$symptom_count)))
+  # a table whose row count is suppressed has no rows
+  expect_identical(nrow(gelc$outsiders$clinic_data$clinical_tests$tests_t1), 0L)
+  expect_identical(names(gelc$outsiders$clinic_data$clinical_tests$tests_t1), c("subject_id", "visit_date", "sys_bp", "dia_bp"))
+})
+
+test_that("leaves that aren't tables, and many rows per person", {
+  expect_identical(gelc$date_rules$min_date, as.Date("2020-04-01"))
+  expect_identical(gelc$date_rules$max_date, as.Date("2021-09-30"))
+  log <- gelc$test_log
+  expect_identical(length(unique(log$subject_id)), 200L)
+  expect_lt(abs(nrow(log) - 4000) / 4000, 0.15)
+  expect_gt(max(table(log$subject_id)), 20L)
+})
+
+test_that("availability flags follow the released patterns", {
+  cohort <- .hes_with_seed(3L, .clinical_cohort(source, NULL, profile, .clinical_tables(profile), NULL))
+  people <- cohort$people
+  flags <- attr(people, "flags")
+  expect_setequal(colnames(flags), c("has_bloods_t0", "has_panel_t0", "has_genome", "has_rnaseq_t0",
+                                     "has_bloods_t1", "has_panel_t1"))
+  expect_true(all(flags[people$main, "has_bloods_t0"]))
+  expect_false(any(flags[!people$main, ]))
+  # follow-up flags only in the follow-up group; the suppressed pattern never appears
+  expect_false(any(flags[!people$followup, c("has_bloods_t1", "has_panel_t1")]))
+  expect_false(any(flags[, "has_genome"] & !flags[, "has_panel_t0"]))
+  expect_identical(sum(people$followup), 60L)
 })
 
 test_that("columns of a table follow its rank correlations", {
@@ -214,15 +292,77 @@ test_that("the real list is read and checked against the profile", {
   expect_error(react_clinical(files), "react_synthetic\\(\\)` or `react_wrangled")
 })
 
-test_that("omics values follow the low-rank structure and feature quantiles", {
-  values <- .hes_with_seed(5L, .clinical_omics_matrix(profile, "panel_a", 3000L))
-  expect_identical(colnames(values), paste0("f", 1:6))
-  rho <- stats::cor(values, method = "spearman", use = "pairwise.complete.obs")
-  expect_gt(rho["f1", "f2"], 0.45)
-  expect_lt(rho["f1", "f2"], 0.75)
-  expect_lt(abs(rho["f1", "f4"]), 0.1)
-  expect_lt(abs(stats::median(values[, "f3"]) - 10), 0.2)
-  expect_lt(abs(mean(is.na(values[, "f4"])) - 0.1), 0.03)
-  expect_true(all(is.na(values[, "f6"])))
-  expect_error(.clinical_omics_matrix(profile, "panel_z", 10L), "no features for platform panel_z")
+test_that("omics scores follow the low-rank structure", {
+  platform <- profile$omics_platform[profile$omics_platform$platform == "panel_a", ]
+  u <- .hes_with_seed(5L, .clinical_omics_scores(profile, platform, 3000L))
+  rho <- stats::cor(u, method = "spearman")
+  expect_gt(rho[1, 2], 0.45)
+  expect_lt(rho[1, 2], 0.75)
+  expect_lt(abs(rho[1, 4]), 0.1)
+  bad <- platform
+  bad$platform <- "panel_z"
+  expect_error(.clinical_omics_scores(profile, bad, 10L), "no features for platform panel_z")
+})
+
+omics <- react_clinical_omics(source, profile = profile)
+panel <- omics$panel
+
+test_that("omics files have the structure of the real files", {
+  expect_named(omics, c("panel", "rnaseq_t0", "gene"))
+  # the lookup table wasn't profiled, so it is left out
+  expect_named(panel, c("df_panel_a", "df_panel_long", "df_stack"))
+  wide <- panel$df_panel_a
+  expect_identical(class(wide), c("tbl_df", "tbl", "data.frame"))
+  expect_identical(names(wide), c("subject_id", "sample_id", "timepoint", paste0("f", 1:6)))
+  expect_identical(nrow(wide), 240L)
+  expect_true(all(grepl("^S[0-9]{5}$", wide$sample_id)))
+  long <- panel$df_panel_long
+  expect_identical(nrow(long), 240L * 6L)
+  expect_setequal(names(long), c("subject_id", "sample_ref", "protein", "assay_group", "value", "value_norm", "lod"))
+  # a column with no more values than features describes the feature
+  expect_identical(nrow(unique(long[c("protein", "assay_group")])), 6L)
+  expect_identical(unique(panel$df_stack$platform), "A")
+  tx <- omics$rnaseq_t0
+  expect_named(tx, c("abundance", "counts", "length", "countsFromAbundance"))
+  expect_identical(dim(tx$counts), c(5L, 50L))
+  expect_identical(rownames(tx$abundance), paste0("G", 1:5))
+  expect_identical(colnames(tx$counts), colnames(tx$abundance))
+  expect_true(all(colSums(tx$counts) > 1e7))
+})
+
+test_that("omics samples belong to flagged people of the same cohort", {
+  wide <- panel$df_panel_a
+  ids <- as.numeric(wide$subject_id)
+  expect_true(all(ids %in% t0$subject_id))
+  # 40 follow-up samples, from the follow-up group; some have no baseline sample
+  expect_lte(sum(duplicated(ids)), 40L)
+  expect_gt(sum(duplicated(ids)), 10L)
+  expect_true(all(ids[duplicated(ids)] %in% t1$subject_id))
+  carriers <- omics$gene
+  expect_identical(nrow(carriers), 45L)
+  # identifiers shared with the wrangled list link the files
+  expect_true(all(carriers$REG_CODE %in% reg$reg_code))
+})
+
+test_that("tables holding the same measurements agree", {
+  wide <- as.data.frame(panel$df_panel_a)
+  long <- as.data.frame(panel$df_panel_long)
+  first <- long[long$sample_ref == wide$sample_id[[1]], ]
+  # P1-P6 are f1-f6 in reverse order (matched by their identical quantiles)
+  expect_equal(first$value[first$protein == "P6"], wide$f1[[1]])
+  expect_equal(first$value[first$protein == "P2"], wide$f5[[1]])
+  expect_equal(first$value_norm, first$value - 10)
+  stack <- as.data.frame(panel$df_stack)
+  expect_equal(stack$value, long$value)
+  expect_identical(stack$sample_id, long$sample_ref)
+})
+
+test_that("follow-up omics samples are correlated with baseline samples", {
+  wide <- as.data.frame(panel$df_panel_a)
+  repeat_ids <- wide$subject_id[duplicated(wide$subject_id)]
+  base <- wide[wide$subject_id %in% repeat_ids & !duplicated(wide$subject_id), ]
+  later <- wide[duplicated(wide$subject_id), ]
+  later <- later[match(base$subject_id, later$subject_id), ]
+  expect_gt(stats::cor(base$f3, later$f3, method = "spearman"), 0.4)
+  expect_error(react_clinical_omics(source, sources = "bloods", profile = profile), "Unknown or unprofiled omics source")
 })

@@ -5,17 +5,28 @@
   `ge_lc_wrangled.rds`: synthetic tables from `react_synthetic()`, or the real
   list from the new `react_wrangled()` source, which can also be checked
   against a profile's inventory. Synthetic tables copy the inventory's table
-  paths, column names, order and classes. The cohort is drawn from the
-  source's synthetic people, and each `subject_id` is a nine-digit number made
-  from the person's `SUBJECT_ID`. Values follow the profile's distributions
-  within sex, age group, long COVID group, main-cohort membership and the
-  other anchors, columns of one table follow its rank correlations, and
-  tables of one visit nest. `react_clinical_profile()` reads the checked
-  output of the clinical inventory kit from a local folder
-  (`REACTEXTRACT_CLINICAL_PROFILE`, with an optional v1.1 supplement); no
+  paths, column names, order and classes, including tables covering the whole
+  REACT study (generated for every synthetic person), a branch for registrants
+  who weren't REACT participants, tables whose row count is suppressed (no
+  rows) and date limits. The cohort is drawn from the source's synthetic
+  people, and each `subject_id` is a nine-digit number made from the person's
+  `SUBJECT_ID`. Values follow the profile's distributions within sex, age
+  group, long COVID group, main-cohort membership and the other anchors;
+  columns of one table follow its rank correlations; follow-up values are
+  correlated with baseline values; dates in different tables follow the
+  profiled intervals; tables of one visit nest; and placeholder dates are kept.
+- `react_clinical_omics()` returns synthetic omics files for the same cohort,
+  each shaped like the object read from the real file (proteomics tables in
+  wide, long and stacked layouts, metabolomics tables, tximport lists of
+  RNA-seq matrices, genotype and autoantibody tables). Samples go to people
+  with the matching availability flag; values follow each platform's low-rank
+  structure and feature quantiles, with tables of the same measurements
+  sharing values.
+- `react_clinical_profile()` reads the checked output of the clinical
+  inventory kit from a local folder (`REACTEXTRACT_CLINICAL_PROFILE`), with
+  the v1.1 supplement layered on top (`REACTEXTRACT_CLINICAL_SUPPLEMENT`); no
   profile is bundled until one is approved. Tests use an invented candidate.
-  `inst/CLINICAL_SYNTHETIC.md` sets out the design and what waits for the
-  kit's v1.1 supplement.
+  `inst/CLINICAL_SYNTHETIC.md` sets out the design and what is still open.
 
 # reactextract 0.6.0.9009 (development)
 

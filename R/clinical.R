@@ -93,22 +93,83 @@ react_clinical <- function(source, tables = "all", profile = NULL, n = NULL, peo
   schema <- .clinical_tables(profile)
   if (nrow(schema) == 0L) stop("The clinical profile has no wrangled tables.", call. = FALSE)
   paths <- schema$table[.clinical_select_paths(schema$table, tables)]
-  .clinical_warn_partial(profile, schema[schema$table %in% paths, , drop = FALSE])
+  .clinical_warn_partial(profile, schema[schema$table %in% paths & schema$kind == "table", , drop = FALSE])
   if (is.null(seed)) seed <- source$seed
 
   .hes_with_seed(seed, {
-    cohort <- .clinical_people(source, people, profile, n)
-    ids <- .clinical_person_ids(profile, paths, cohort, seed)
+    cohort <- .clinical_cohort(source, people, profile, schema, n)
+    dates <- .clinical_timing(profile, schema, cohort$people)
+    branch_key <- function(branch) if (branch == "") ".main" else branch
+    ids <- list()
+    for (branch in unique(schema$branch[schema$table %in% paths])) {
+      frame <- if (branch == "") cohort$people else cohort$branches[[branch]]
+      if (is.null(frame)) next
+      in_branch <- paths[schema$branch[match(paths, schema$table)] == branch]
+      ids[[branch_key(branch)]] <- .clinical_person_ids(profile, in_branch, frame, seed, branch)
+    }
+    pairs <- .clinical_visit_pairs(profile, schema)
+    generated <- new.env(parent = emptyenv())
+
+    # each table has its own random stream; a follow-up table first makes its
+    # baseline table, whose probabilities it uses
+    make <- function(path) {
+      if (exists(path, envir = generated, inherits = FALSE)) return(get(path, envir = generated))
+      table <- schema[schema$table == path, , drop = FALSE]
+      if (table$kind == "value") {
+        data <- .clinical_value(profile, table)
+      } else {
+        frame <- if (table$branch == "") cohort$people else cohort$branches[[table$branch]]
+        baseline <- NULL
+        link <- pairs[[path]]
+        if (!is.null(link) && !is.null(frame)) {
+          latent <- attr(make(link$t0), "latent")
+          if (!is.null(latent) && length(latent$rows) > 0L) {
+            u <- matrix(NA_real_, nrow(frame), ncol(latent$u), dimnames = list(NULL, colnames(latent$u)))
+            first <- !duplicated(latent$rows)
+            u[latent$rows[first], ] <- latent$u[first, , drop = FALSE]
+            baseline <- list(u = u, rho = link$rho)
+          }
+        }
+        keep <- unique(unlist(lapply(pairs, function(p) if (identical(p$t0, path)) names(p$rho))))
+        if (is.null(keep)) keep <- character()
+        data <- .with_stream_seed(seed, "clinical", path, {
+          rows <- if (is.null(frame) || !isTRUE(table$has_persons)) NULL else .clinical_table_people(frame, table)
+          .clinical_table(profile, table, frame, rows, ids[[branch_key(table$branch)]],
+                          if (table$branch == "") dates else list(), baseline, keep)
+        })
+      }
+      assign(path, data, envir = generated)
+      data
+    }
     leaves <- list()
     for (path in paths) {
-      table <- schema[schema$table == path, , drop = FALSE]
-      leaves[[path]] <- .with_stream_seed(seed, "clinical", path, {
-        rows <- if (isTRUE(table$has_persons)) .clinical_table_people(cohort, table) else NULL
-        .clinical_table(profile, table, cohort, rows, ids)
-      })
+      data <- make(path)
+      attr(data, "latent") <- NULL
+      leaves[path] <- list(data)
     }
     .clinical_nest(leaves)
   })
+}
+
+# Follow-up tables linked to their baseline tables by the kit's visit pairs
+# (19_visit_pairs.csv): a family names a path element, and the baseline table
+# is the follow-up path with "t1" changed to "t0" in its last element. A list
+# by follow-up path of the baseline path and the columns' rank correlations.
+.clinical_visit_pairs <- function(profile, schema) {
+  pairs <- profile$visit_pairs
+  if (nrow(pairs) == 0L || !all(c("family", "column", "rho") %in% names(pairs))) return(list())
+  pairs <- pairs[pairs$source %in% .clinical_release_source & !is.na(pairs$rho), , drop = FALSE]
+  out <- list()
+  follow <- schema[schema$visit %in% "t1" & schema$kind == "table" & schema$branch == "", , drop = FALSE]
+  for (path in follow$table) {
+    parts <- strsplit(path, "/", fixed = TRUE)[[1L]]
+    base <- paste(c(utils::head(parts, -1L), gsub("t1", "t0", parts[[length(parts)]], fixed = TRUE)),
+                  collapse = "/")
+    rows <- pairs[pairs$family %in% parts, , drop = FALSE]
+    if (!base %in% schema$table || nrow(rows) == 0L) next
+    out[[path]] <- list(t0 = base, rho = stats::setNames(rows$rho, rows$column))
+  }
+  out
 }
 
 # Tables whose inventory lists fewer columns than the table has (partial in

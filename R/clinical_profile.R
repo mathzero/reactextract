@@ -5,6 +5,7 @@
 # 15-17, 19 and 20 are in the first run) give empty tables.
 .clinical_profile_files <- c(
   sources = "inventory/00_sources.csv",
+  source_issues = "inventory/00_source_issues.csv",
   context = "inventory/01_context.csv",
   structure = "inventory/02_structure.csv",
   tables = "inventory/03_tables.csv",
@@ -95,6 +96,8 @@ react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROF
     extra <- .clinical_read_candidate(supplement)
     replaced <- unique(extra$sources$source)
     for (name in names(.clinical_profile_files)) {
+      # a file the supplement left empty wasn't rerun, so the first run's rows stand
+      if (nrow(extra[[name]]) == 0L) next
       kept <- base[[name]]
       if ("source" %in% names(kept)) kept <- kept[!kept$source %in% replaced, , drop = FALSE]
       base[[name]] <- .clinical_bind_rows(kept, extra[[name]])

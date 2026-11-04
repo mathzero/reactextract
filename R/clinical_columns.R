@@ -18,9 +18,14 @@
   keep <- counts > 0
   if (!any(keep)) return(NULL)
   levels <- overall$level[keep]
+  if (length(u) == 0L) return(levels[0L])
   base <- counts[keep] / sum(counts[keep])
+  by <- intersect(setdiff(unique(rows$stratum_var), "all"), names(strata))
+  if (length(by) == 0L) {
+    return(levels[pmin(findInterval(u, cumsum(base)) + 1L, length(levels))])
+  }
   logp <- matrix(log(base), length(u), length(levels), byrow = TRUE)
-  for (stratum_var in intersect(setdiff(unique(rows$stratum_var), "all"), names(strata))) {
+  for (stratum_var in by) {
     part <- rows[rows$stratum_var == stratum_var & rows$level %in% levels, , drop = FALSE]
     if (nrow(part) == 0L) next
     part$n_rows[is.na(part$n_rows)] <- 0
@@ -132,7 +137,11 @@
   if (is.null(first)) return(NULL)
   next_month <- as.Date(format(first + 31, "%Y-%m-01"))
   days <- as.numeric(next_month - first)
-  first + floor(stats::runif(n) * days)
+  value <- first + floor(stats::runif(n) * days)
+  # placeholder months (before 1900) keep the placeholder date, not a random day
+  early <- first < as.Date("1900-01-01")
+  value[early] <- .clinical_placeholder_date(format(first[early], "%Y-%m"))
+  value
 }
 
 # Character values from shapes (letters to "A", digits to "9")
@@ -205,25 +214,45 @@
 }
 
 # One generated table. `rows` gives the person (index into `people`) of each
-# row, or NULL for a table without people, which keeps its row count.
-.clinical_table <- function(profile, table, people, rows, ids) {
-  columns <- .clinical_rows(profile$columns, table$table)
+# row, or NULL for a table without people, which keeps its row count (`n`
+# overrides it). Distributions come from `table$profile_table` in `source`.
+# `dates` holds person-level dates keyed "table:column" (from the timing
+# intervals). `baseline` links a follow-up table to its baseline: `u` holds
+# each person's baseline probability per column and `rho` the columns' rank
+# correlations between visits. Probabilities of the columns named in `keep`
+# are returned in the "latent" attribute, for a follow-up table to use.
+# `only` limits the table to some of its columns.
+.clinical_table <- function(profile, table, people, rows, ids = list(), dates = list(), baseline = NULL,
+                            keep = character(), source = .clinical_release_source, n = NULL, only = NULL) {
+  columns <- .clinical_rows(profile$columns, table$table, source = source)
   columns <- columns[order(columns$position), , drop = FALSE]
-  n <- if (is.null(rows)) as.integer(table$n_rows) else length(rows)
+  if (!is.null(only)) columns <- columns[columns$column %in% only, , drop = FALSE]
+  from <- if (is.null(table$profile_table) || is.na(table$profile_table)) table$table else table$profile_table
+  if (from != table$table) {
+    # a borrowed profile also gives completeness where the table's own is suppressed
+    own <- .clinical_rows(profile$columns, from, source = source)
+    unknown <- is.na(columns$n_nonmissing) & is.na(columns$n_missing)
+    at <- match(columns$column[unknown], own$column)
+    columns$n_nonmissing[unknown] <- own$n_nonmissing[at]
+    columns$n_missing[unknown] <- own$n_missing[at]
+  }
+  if (is.null(n)) n <- if (is.null(rows)) as.integer(table$n_rows) else length(rows)
+  if (is.na(n)) n <- 0L
   anchor_names <- intersect(c("sex", "age_group", "lc_group", "main_cohort", "route", "study", "ethnicity"),
                             names(people))
   strata <- if (is.null(rows)) list() else as.list(people[rows, anchor_names, drop = FALSE])
   copula <- .clinical_copula(
-    profile$correlations[profile$correlations$source == .clinical_release_source &
-                           profile$correlations$scope == table$table, , drop = FALSE],
+    profile$correlations[profile$correlations$source == source & profile$correlations$scope == from, ,
+                         drop = FALSE],
     columns$column, n
   )
-  numeric_rows <- .clinical_rows(profile$numeric, table$table)
-  categorical_rows <- .clinical_rows(profile$categorical, table$table)
-  month_rows <- .clinical_rows(profile$date_months, table$table)
-  summary_rows <- .clinical_rows(profile$date_summary, table$table)
-  shape_rows <- .clinical_rows(profile$id_shapes, table$table)
+  numeric_rows <- .clinical_rows(profile$numeric, from, source = source)
+  categorical_rows <- .clinical_rows(profile$categorical, from, source = source)
+  month_rows <- .clinical_rows(profile$date_months, from, source = source)
+  summary_rows <- .clinical_rows(profile$date_summary, from, source = source)
+  shape_rows <- .clinical_rows(profile$id_shapes, from, source = source)
   anchor_columns <- profile$anchors
+  latent <- matrix(rep(NA_real_, n * length(keep)), n, length(keep), dimnames = list(NULL, keep))
 
   out <- vector("list", nrow(columns))
   names(out) <- columns$column
@@ -232,17 +261,28 @@
     name <- column$column
     class <- column$class
     u <- if (!is.null(copula) && name %in% colnames(copula)) copula[, name] else stats::runif(n)
+    if (!is.null(baseline) && !is.null(rows) && name %in% names(baseline$rho) && name %in% colnames(baseline$u)) {
+      u0 <- baseline$u[rows, name]
+      linked <- !is.na(u0)
+      r <- 2 * sin(pi * baseline$rho[[name]] / 6)
+      z <- r * stats::qnorm(u0[linked]) + sqrt(1 - r^2) * stats::qnorm(u[linked])
+      u[linked] <- stats::pnorm(z)
+    }
+    if (name %in% keep) latent[, name] <- u
     value <- NULL
-    is_key <- !is.null(rows) && tolower(name) == "subject_id"
-    if (is_key) {
-      out[[i]] <- .clinical_as_class(people$subject_id[rows], class)
+    if (!is.null(rows) && .clinical_is_person_key(name)) {
+      key <- people$subject_id[rows]
+      out[[i]] <- .clinical_as_class(if (class == "character") sprintf("%.0f", key) else key, class)
       next
     }
+    date_key <- paste0(table$table, ":", name)
     anchor <- if (!is.null(rows) && name %in% anchor_columns) {
       .clinical_anchor_value(people[[names(anchor_columns)[match(name, anchor_columns)]]][rows], class)
     }
     if (!is.null(anchor)) {
       value <- anchor
+    } else if (!is.null(rows) && !is.null(dates[[date_key]])) {
+      value <- dates[[date_key]][rows]
     } else if (column$role == "identifier") {
       value <- if (!is.null(rows) && !is.null(ids[[name]])) ids[[name]][rows] else
         .clinical_identifiers(shape_rows[shape_rows$column == name, , drop = FALSE], name, n, class)
@@ -255,13 +295,9 @@
     } else if (column$role == "date") {
       value <- .clinical_draw_dates(month_rows[month_rows$column == name, , drop = FALSE],
                                     summary_rows[summary_rows$column == name, , drop = FALSE], n)
-      if (!is.null(value) && class == "POSIXct") {
-        value <- as.POSIXct(value) + floor(stats::runif(n) * 86400)
-        attr(value, "tzone") <- "UTC"
-      }
     } else if (column$role == "high_cardinality") {
       value <- .clinical_draw_shapes(shape_rows[shape_rows$column == name, , drop = FALSE], n)
-      if (is.null(value)) {
+      if (is.null(value) && n > 0L) {
         k <- max(1, min(column$n_distinct, 999, na.rm = TRUE))
         value <- sprintf("%s_%03d", name, sample.int(k, n, replace = TRUE))
       }
@@ -271,6 +307,10 @@
     if (is.null(value)) {
       out[[i]] <- .clinical_na(class, n)
       next
+    }
+    if (inherits(value, "Date") && class == "POSIXct") {
+      value <- as.POSIXct(value) + floor(stats::runif(n) * 86400)
+      attr(value, "tzone") <- "UTC"
     }
     value <- .clinical_as_class(value, class)
     n_ok <- if (is.na(column$n_nonmissing)) 0 else column$n_nonmissing
@@ -284,7 +324,36 @@
   classes <- strsplit(if (is.na(table$class)) "data.frame" else table$class, "/", fixed = TRUE)[[1L]]
   if ("data.table" %in% classes) classes <- "data.frame"
   class(data) <- classes
+  if (length(keep) > 0L) attr(data, "latent") <- list(rows = rows, u = latent)
   data
+}
+
+# The person key of a table: subject_id however it is written ("Subject ID")
+.clinical_is_person_key <- function(name) tolower(gsub("[^A-Za-z]", "", name)) == "subjectid"
+
+# A leaf of the wrangled list that isn't a table, such as a date limit. These
+# aren't profiled: a date whose name says min or max takes the first or last
+# day of the released months of related tables (those whose path starts with
+# the leaf's first word, such as "infection"), anything else is missing.
+.clinical_value <- function(profile, table) {
+  class <- strsplit(table$class, "/", fixed = TRUE)[[1L]][[1L]]
+  n <- if (is.na(table$n_rows)) 1L else as.integer(table$n_rows)
+  value <- .clinical_na(class, n)
+  months <- profile$date_months[profile$date_months$source == .clinical_release_source &
+                                  !is.na(profile$date_months$n_rows), , drop = FALSE]
+  related <- startsWith(months$table, sub("[_/].*", "", table$table))
+  if (any(related)) months <- months[related, , drop = FALSE]
+  months <- months$level
+  months <- sort(unique(months[!is.na(months) & months >= "1900"]))
+  name <- tolower(basename(table$table))
+  if (class == "Date" && length(months) > 0L) {
+    if (grepl("min", name, fixed = TRUE)) value <- rep(as.Date(paste0(months[[1L]], "-01")), n)
+    if (grepl("max", name, fixed = TRUE)) {
+      last <- as.Date(paste0(months[[length(months)]], "-01"))
+      value <- rep(as.Date(format(last + 31, "%Y-%m-01")) - 1, n)
+    }
+  }
+  value
 }
 
 # A person's anchor label for an anchor column, or NULL when the column codes
@@ -308,11 +377,11 @@
 # Each person's value of every identifier column (other than subject_id) that
 # the selected tables need, the same in every table. Each column has its own
 # random stream, so values don't depend on which tables were requested.
-.clinical_person_ids <- function(profile, tables, people, seed) {
+.clinical_person_ids <- function(profile, tables, people, seed, branch = "") {
   columns <- profile$columns[profile$columns$source == .clinical_release_source &
                                profile$columns$table %in% tables &
                                profile$columns$role == "identifier" &
-                               tolower(profile$columns$column) != "subject_id", , drop = FALSE]
+                               !.clinical_is_person_key(profile$columns$column), , drop = FALSE]
   shapes <- profile$id_shapes[profile$id_shapes$source == .clinical_release_source &
                                 profile$id_shapes$stratum_var == "all", , drop = FALSE]
   ids <- list()
@@ -323,7 +392,7 @@
       totals <- tapply(rows$n_rows, rows$table, sum, na.rm = TRUE)
       rows <- rows[rows$table == names(totals)[which.max(totals)], , drop = FALSE]
     }
-    ids[[name]] <- .with_stream_seed(seed, "clinical-id", name,
+    ids[[name]] <- .with_stream_seed(seed, paste0("clinical-id", branch), name,
                                      .clinical_identifiers(rows, name, nrow(people), class))
   }
   ids

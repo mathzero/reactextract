@@ -1,2 +1,6 @@
 "source","group","reader","status","message","size_mb","modified","seconds"
-"wrangled","wrangled","rds_tree","ok","",1,"2026-01-01",1
+"wrangled","wrangled","invented","ok","",1,"2026-01-01",1
+"master","wrangled","invented","ok","",1,"2026-01-01",1
+"panel","omics","invented","ok","",1,"2026-01-01",1
+"rnaseq_t0","omics","invented","ok","",1,"2026-01-01",1
+"gene","omics","invented","ok","",1,"2026-01-01",1

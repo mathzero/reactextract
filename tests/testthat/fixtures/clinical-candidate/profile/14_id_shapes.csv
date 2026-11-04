@@ -1,4 +1,5 @@
 "source","table","column","stratum_var","stratum","level","level_order","n_rows","n_persons"
+"panel","panel_a/samples","sample_id","all","all","S99999",1,240,240
 "wrangled","registration_data","subject_id","all","all","999999999",1,400,400
 "wrangled","registration_data","reg_code","all","all","AA9999",1,400,400
 "wrangled","clinic_data/clinical_tests/tests_t0","reg_code","all","all","AA9999",1,300,300

@@ -1,2 +1,6 @@
-"source","platform","n_samples_source","n_samples","n_samples_mapped","n_samples_profiled","n_persons","n_persons_main","n_samples_t0","n_samples_t1","n_samples_visit_unknown","n_features","n_features_profiled","share_missing","share_nonpositive","transform","profiled_on","layout","value_column","feature_column","sample_column","n_duplicate_cells","first_feature","n_features_source","feature_filter"
-"panel","panel_a",300,300,300,300,280,270,280,20,,6,6,0.05,0,"none","all_samples","wide",,,"sample_id",,"f1",6,
+"source","platform","n_samples_source","n_samples","n_samples_mapped","n_samples_profiled","n_persons","n_persons_main","n_samples_t0","n_samples_t1","n_samples_visit_unknown","n_features","n_features_profiled","share_missing","share_nonpositive","transform","profiled_on","layout","value_column","feature_column","sample_column","split","n_duplicate_cells","first_feature","n_features_source","feature_filter"
+"panel","panel_a",240,240,240,240,220,215,200,40,,6,6,0.02,0,"none","all_samples","wide",,,"sample_id",,,,6,
+"panel","panel_long:value",240,240,240,240,220,215,200,40,,6,6,0.02,0,"none","all_samples","long","value","protein","sample_ref",,,,6,
+"panel","panel_long:value_norm",240,240,240,240,220,215,200,40,,6,6,0.02,0,"none","all_samples","long","value_norm","protein","sample_ref",,,,6,
+"panel","stack:A",240,240,240,240,220,215,200,40,,6,6,0.02,0,"none","all_samples","long","value","protein","sample_id","platform = A",,,6,
+"rnaseq_t0","rna_seq",50,50,50,50,220,215,50,,,5,5,0.02,0,"log2p1","all_samples","tximport",,,,,,,5,
