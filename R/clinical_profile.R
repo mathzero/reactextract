@@ -1,8 +1,8 @@
 # Clinical Study profile: a checked inventory-kit candidate ----------------------
 
 # The candidate's files, by the name used in the profile object. Only the
-# structure files are required; profile files that are absent or empty (as
-# 15-17, 19 and 20 are in the first run) give empty tables.
+# structure files are required; files that are absent or empty give empty
+# tables, so candidates from earlier kit versions still read.
 .clinical_profile_files <- c(
   sources = "inventory/00_sources.csv",
   source_issues = "inventory/00_source_issues.csv",
@@ -10,6 +10,7 @@
   structure = "inventory/02_structure.csv",
   tables = "inventory/03_tables.csv",
   columns = "inventory/04_columns.csv",
+  source_columns = "inventory/04b_source_columns.csv",
   id_sets = "inventory/08_id_sets.csv",
   numeric = "profile/10_numeric.csv",
   categorical = "profile/11_categorical.csv",
@@ -45,6 +46,7 @@
              "n_persons_main", "rpp_1", "rpp_2", "rpp_3_5", "rpp_6_10", "rpp_11_plus"),
   columns = c("source", "table", "position", "column", "class", "role",
               "n_nonmissing", "n_missing", "n_distinct"),
+  source_columns = c("source", "table", "position", "column", "class"),
   numeric = c("source", "table", "column", "stratum_var", "stratum", "n", "share_integer",
               "decimals", .clinical_quantile_columns),
   categorical = c("source", "table", "column", "stratum_var", "stratum", "level", "level_order", "n_rows"),
@@ -61,15 +63,15 @@
 .clinical_text_columns <- c(
   "source", "group", "reader", "status", "message", "modified", "key", "value", "path", "class",
   "table", "visit", "column", "role", "stratum_var", "stratum", "level", "set", "set1", "set2",
-  "scope", "var1", "var2", "platform", "feature", "stat", "covariate", "token", "person_key"
+  "scope", "var1", "var2", "platform", "feature", "stat", "covariate", "token", "person_key", "kit"
 )
 
 #' Read a Clinical Study profile
 #'
 #' Reads the checked output of reactextract's clinical inventory kit
-#' (`clinical-inventory-v1`): the candidate folder holding `inventory/` and
-#' `profile/`. [react_clinical()] generates synthetic Clinical Study data from
-#' it.
+#' (`clinical-inventory-v1.2` or later): the candidate folder holding
+#' `inventory/` and `profile/`. [react_clinical()] and
+#' [react_clinical_omics()] generate synthetic Clinical Study data from it.
 #'
 #' No profile derived from REACT aggregates is bundled with the package yet.
 #' Until one is approved and checksum-pinned, the candidate is read from a
@@ -78,42 +80,27 @@
 #' or commit it. See `inst/CLINICAL_SYNTHETIC.md`.
 #'
 #' @param path The candidate folder.
-#' @param supplement Optional folder of a supplement candidate, such as
-#'   `clinical-inventory-v1.1-supplement-candidate`. For each source it lists,
-#'   its rows replace that source's rows from `path`.
 #' @return A `react_clinical_profile` object: a list of the kit's tables, the
-#'   anchors, the folder paths and the candidates' manifest checksums.
+#'   anchors, the kit version that wrote the candidate (from
+#'   `00_sources.csv`), the folder path and the candidate's manifest
+#'   checksums.
 #' @export
-react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROFILE"),
-                                   supplement = Sys.getenv("REACTEXTRACT_CLINICAL_SUPPLEMENT")) {
+react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROFILE")) {
   if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
     stop("No approved Clinical Study profile is bundled yet. Set REACTEXTRACT_CLINICAL_PROFILE ",
          "to a released clinical inventory candidate folder (the one holding inventory/ and ",
          "profile/), or pass `path`.", call. = FALSE)
   }
   base <- .clinical_read_candidate(path)
-  if (is.character(supplement) && length(supplement) == 1L && !is.na(supplement) && nzchar(supplement)) {
-    extra <- .clinical_read_candidate(supplement)
-    replaced <- unique(extra$sources$source)
-    for (name in names(.clinical_profile_files)) {
-      # a file the supplement left empty wasn't rerun, so the first run's rows stand
-      if (nrow(extra[[name]]) == 0L) next
-      kept <- base[[name]]
-      if ("source" %in% names(kept)) kept <- kept[!kept$source %in% replaced, , drop = FALSE]
-      base[[name]] <- .clinical_bind_rows(kept, extra[[name]])
-    }
-    base$manifest <- rbind(base$manifest, extra$manifest)
-  } else {
-    supplement <- NA_character_
-  }
+  kit <- if ("kit" %in% names(base$sources)) sort(unique(stats::na.omit(base$sources$kit))) else character()
+  version <- if (length(kit) == 0L) "unknown" else paste(kit, collapse = "+")
 
   context <- base$context
   anchor_rows <- startsWith(context$key, "anchor:")
   anchors <- stats::setNames(context$value[anchor_rows], sub("^anchor:", "", context$key[anchor_rows]))
   structure(
     c(
-      list(version = "clinical-inventory-v1", status = "local_candidate",
-           path = normalizePath(path), supplement = supplement, anchors = anchors),
+      list(version = version, status = "local_candidate", path = normalizePath(path), anchors = anchors),
       base
     ),
     class = "react_clinical_profile"
@@ -191,14 +178,6 @@ react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROF
   numeric_cols <- setdiff(columns, .clinical_text_columns)
   data[numeric_cols] <- lapply(data[numeric_cols], as.numeric)
   data
-}
-
-.clinical_bind_rows <- function(a, b) {
-  if (nrow(b) == 0L) return(a)
-  if (nrow(a) == 0L) return(b)
-  for (name in setdiff(names(b), names(a))) a[[name]] <- rep(b[[name]][0][NA], nrow(a))
-  for (name in setdiff(names(a), names(b))) b[[name]] <- rep(a[[name]][0][NA], nrow(b))
-  rbind(a, b[names(a)])
 }
 
 .clinical_check_profile <- function(profile) {

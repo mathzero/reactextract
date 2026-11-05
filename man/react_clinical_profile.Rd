@@ -4,27 +4,22 @@
 \alias{react_clinical_profile}
 \title{Read a Clinical Study profile}
 \usage{
-react_clinical_profile(
-  path = Sys.getenv("REACTEXTRACT_CLINICAL_PROFILE"),
-  supplement = Sys.getenv("REACTEXTRACT_CLINICAL_SUPPLEMENT")
-)
+react_clinical_profile(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROFILE"))
 }
 \arguments{
 \item{path}{The candidate folder.}
-
-\item{supplement}{Optional folder of a supplement candidate, such as
-\code{clinical-inventory-v1.1-supplement-candidate}. For each source it lists,
-its rows replace that source's rows from \code{path}.}
 }
 \value{
 A \code{react_clinical_profile} object: a list of the kit's tables, the
-anchors, the folder paths and the candidates' manifest checksums.
+anchors, the kit version that wrote the candidate (from
+\verb{00_sources.csv}), the folder path and the candidate's manifest
+checksums.
 }
 \description{
 Reads the checked output of reactextract's clinical inventory kit
-(\code{clinical-inventory-v1}): the candidate folder holding \verb{inventory/} and
-\verb{profile/}. \code{\link[=react_clinical]{react_clinical()}} generates synthetic Clinical Study data from
-it.
+(\code{clinical-inventory-v1.2} or later): the candidate folder holding
+\verb{inventory/} and \verb{profile/}. \code{\link[=react_clinical]{react_clinical()}} and
+\code{\link[=react_clinical_omics]{react_clinical_omics()}} generate synthetic Clinical Study data from it.
 }
 \details{
 No profile derived from REACT aggregates is bundled with the package yet.

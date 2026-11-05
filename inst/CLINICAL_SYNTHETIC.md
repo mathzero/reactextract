@@ -1,8 +1,8 @@
 # Synthetic REACT Clinical Study data (draft design)
 
-Status: draft, 4 November 2026. The generator runs on a local inventory
-candidate (the first run plus the v1.1 supplement) or on invented fixtures.
-No profile from REACT aggregates is bundled yet.
+Status: draft, 5 November 2026. The generator runs on a local inventory
+candidate (`clinical-inventory-v1.2`) or on invented fixtures. No profile
+from REACT aggregates is bundled yet.
 
 `react_clinical()` returns the REACT Clinical Study's wrangled release: the
 nested list that the canonical wrangling pipeline saves as
@@ -11,7 +11,7 @@ same synthetic cohort. As with `react_extract()` and `react_hes()`, only the
 source changes for the wrangled list:
 
 ```r
-profile <- react_clinical_profile()          # REACTEXTRACT_CLINICAL_PROFILE (+ _SUPPLEMENT)
+profile <- react_clinical_profile()          # path from REACTEXTRACT_CLINICAL_PROFILE
 source  <- react_synthetic(seed = 1L)
 gelc    <- react_clinical(source, profile = profile)
 omics   <- react_clinical_omics(source, sources = "proteomics", profile = profile)
@@ -49,30 +49,29 @@ their files (the kit's `sources.R` lists the paths).
 
 ## Where the profile comes from
 
-The input is the checked output of the enclave inventory kit
-(`clinical-inventory-v1`): the first run (2 November 2026) and the v1.1
-supplement (3 November 2026), which re-ran the seven sources that had stopped
-on kit bugs and added two. Each has an `inventory/` folder (structure) and a
-`profile/` folder (distributions). The kit's `README.md` and `REVIEWER.md`
-explain each file.
+The input is the checked output of the enclave inventory kit. The
+`clinical-inventory-v1.2` candidate (passed output checking on 5 November
+2026) profiles all 25 sources with kit v1.2. It replaces the first run (2
+November) and the v1.1 supplement (3 November), which re-ran the sources that
+had stopped on kit bugs. Each candidate has an `inventory/` folder
+(structure) and a `profile/` folder (distributions). The kit's `README.md`
+and `REVIEWER.md` explain each file.
 
-Until a profile derived from them is approved and checksum-pinned, the package
-bundles nothing from them:
+Until a profile derived from it is approved and checksum-pinned, the package
+bundles nothing from it:
 
-- `react_clinical_profile()` reads the first candidate from a local path (by
+- `react_clinical_profile()` reads one candidate from a local path (by
   default `REACTEXTRACT_CLINICAL_PROFILE`) and verifies its `manifest.csv`
-  checksums;
-- the supplement (`REACTEXTRACT_CLINICAL_SUPPLEMENT`) is layered on top: for
-  each source it lists, its rows replace that source's rows file by file. A
-  file the supplement left empty (it re-ran only some steps) keeps the first
-  run's rows;
-- the package's tests use a small invented candidate
+  checksums. The profile's `version` is the kit version recorded in
+  `00_sources.csv`. Files a candidate lacks (an earlier kit wrote fewer) read
+  as empty tables;
+- the package's tests use a small invented candidate in the v1.2 layout
   (`tests/testthat/fixtures/clinical-candidate/`, written by
   `make-clinical-candidate.R` beside it). It copies the kit's file layout and
   disclosure rules, not REACT content: table paths, column names and values
   are invented;
-- nothing from the candidates, including column names and counts, is
-  committed. The profile object records the folder paths and manifest
+- nothing from the candidate, including column names and counts, is
+  committed. The profile object records the folder path and manifest
   checksums, and is marked `local_candidate`.
 
 Approval later follows the HES route: derive a compact profile, check that it
@@ -84,9 +83,8 @@ development override.
 ## The wrangled list
 
 Every leaf of the wrangled list that `inventory/02_structure.csv` names is
-generated at the same path. With the v1.1 supplement every table has its full
-column list, and a full-scale run on the local candidates gives every table
-the inventory's column names, order and classes.
+generated at the same path. A full-scale run on the local v1.2 candidate gives
+every table the inventory's column names, order and classes.
 
 The leaves are of several kinds, each recognised from the inventory rather
 than by name:
@@ -193,13 +191,21 @@ first wrangled table holding the same column (for example the onset date in
 the population table of infection dates). A date that is a placeholder doesn't
 start an interval: another person's real date stands in for it.
 
-**Placeholder dates.** The kit didn't recognise placeholder dates on the real
-data in v1.1 (`n_placeholder` is blank, and some date quantiles start in
-1582). Their months are still counted in `13_date_months.csv`, so they are
-kept as real messiness (plan principle 5): months before 1900 give the
-placeholder date itself (1582-10-14, SPSS's zero date, for October 1582, the
-first of the month otherwise), at their released share, also for dates set by
-intervals.
+**Placeholder dates.** Some date columns hold placeholders for unknown dates:
+dates up to 1900-01-01 or in 9999 (the kit's cut-off from v1.2, and react-hub
+H18's for HES and GP dates), mostly SPSS's zero date, 1582-10-14. Kit v1.2
+counts them in `n_placeholder` (`12_date_summary.csv`) and leaves them out of
+the date quantiles; their months stay in `13_date_months.csv`. They are kept
+as real messiness (plan principle 5), so downstream code meets them as it
+does in the real data:
+
+- a placeholder month gives the placeholder date itself (1582-10-14 for
+  October 1582, 9999-12-31 for December 9999, the first of the month
+  otherwise), at its released share, including for dates set by intervals;
+- where the placeholder months are suppressed one by one but their count
+  isn't, 1582-10-14 is used at the counted share;
+- a placeholder doesn't start an interval: another person's real date stands
+  in for it.
 
 ## Omics
 
@@ -245,15 +251,25 @@ values as the platform tables, split by its platform column.
 **Layouts.**
 
 - Wide tables: the sample-level columns, then one column per feature.
-- Long tables: one row per sample and feature; the sample-level columns,
-  then the row-level columns. A row-level column with no more distinct values
-  than there are features describes the feature (one value per feature); the
-  rest vary by row.
+- Long tables: one row per sample and feature. The kit profiles them as
+  sample-level and row-level columns; `04b_source_columns.csv` (kit v1.2)
+  then gives the source table's column order and classes. A row-level column
+  with no more distinct values than there are features describes the feature
+  (one value per feature); the rest vary by row.
 - tximport lists: `abundance` (TPM, from the profile), `counts` (abundance
   times a length per gene, scaled to a library size per sample from
   `32_omics_samples.csv`), `length` and `countsFromAbundance`.
 - Person-level tables (such as genotype carriers) are made like wrangled
   tables, from the people with the matching flag.
+- Reference tables without people (such as the proteomics name lookup,
+  protein summary and detectability table) are made from their profiles, with
+  the inventory's row count, or no rows where it is suppressed. Their name
+  columns hold the generated protein names, so they join to the tables: with
+  two or more name columns, each row pairs a platform's own name for a
+  protein with the stacked table's name for it (a lookup); a single name
+  column holds the matched platform's own names, or else the stacked table's
+  names. The pairing follows the generator's feature matching, not the real
+  lookup.
 
 Identifiers that share a name (ignoring case) with one in the wrangled list,
 such as a barcode, take the person's value from there, so the files link.
@@ -280,18 +296,20 @@ and shows labels only when 10 people share them. The generator:
 
 ## Still open
 
-- **Column order in long omics tables.** The kit inventories a long table as
-  sample-level and row-level columns, each in its own order, so the real
-  interleaving isn't known: the synthetic tables have the right columns and
-  classes, in sample-then-row order. A kit change recording each column's
-  position in the source table would close this.
+- **Sources not generated.** The later questionnaires (2022, 2025), the
+  Cognitron tests, the clinical cohort's extracts of NHS records, the
+  identifier and linkage files and `combined_data_set.rds` aren't generated;
+  `combined_data_set.rds`'s anchors and availability flags are used. Kit v1.2
+  profiles them, so they could be added as person tables (the 2025
+  questionnaire's `date` is now a date; the 2022 questionnaire's interview
+  start and finish times are free text and would need inventing).
 - **Omics gaps.** RNA-seq matrices have only the profiled genes (expressed in
   at least 10% of samples), and their samples don't yet link to people (the
   sequencing manifests, which map them, are workbooks and aren't generated).
   Component R² with visit, batch and anchors (`35_omics_r2.csv`), per-sample
-  missingness and non-numeric tokens aren't used yet. The proteomics lookup
-  and QC tables weren't profiled and are left out. Sample-level columns that
-  record the visit are drawn independently of the sample's visit.
+  missingness and non-numeric tokens aren't used yet. Sample-level columns
+  that record the visit are drawn independently of the sample's visit. Long
+  tables' columns that the kit's tables don't hold are missing.
 - **Memory.** At full scale the omics files take several gigabytes (the long
   proteomics tables and RNA-seq matrices dominate). Use `n` or `sources`.
 - **Cohort selection.** Registrants are drawn from all synthetic adults, not
@@ -300,8 +318,6 @@ and shows labels only when 10 people share them. The generator:
   results.
 - **REACT-1/2 records.** The cohort's REACT-1/2 survey records are generated
   from their profile, not from `react_extract()` for the same people.
-- **`combined_data_set.rds`** isn't generated; its anchors and availability
-  flags are used.
 - **Approval.** Build the compact profile, check it, and request approval for
   bundling; then write a validation note comparing synthetic output with the
-  candidates' aggregates, as `scripts/hes/VALIDATION.md` does for HES.
+  candidate's aggregates, as `scripts/hes/VALIDATION.md` does for HES.

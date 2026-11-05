@@ -86,5 +86,12 @@
 "panel","stack/long_rows",1,"platform","character","categorical",1440,,1
 "panel","stack/long_rows",2,"protein","character","high_cardinality",1440,,6
 "panel","stack/long_rows",3,"value","numeric","continuous",1440,,1400
+"panel","names_lookup",1,"native_name","character","high_cardinality",12,,12
+"panel","names_lookup",2,"common_name","character","high_cardinality",12,,6
+"panel","names_lookup",3,"origin","character","categorical",12,,2
+"panel","protein_summary",1,"common_name","character","high_cardinality",6,,6
+"panel","protein_summary",2,"n_platforms","integer","coded_numeric",6,,1
+"panel","qc_record",1,"step","character","categorical",,,3
+"panel","qc_record",2,"n_removed","integer","coded_numeric",,,3
 "gene","carrier",1,"REG_CODE","character","identifier",45,,45
 "gene","carrier",2,"carrier","character","categorical",45,,2

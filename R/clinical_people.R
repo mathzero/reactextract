@@ -465,7 +465,7 @@
       # a placeholder "from" date stands for an unknown date, so the interval
       # starts from another person's real date instead
       start <- dates[[from]]
-      fake <- !is.na(start) & start < as.Date("1900-01-01")
+      fake <- .clinical_placeholder_month(format(start, "%Y-%m"))
       real <- start[!is.na(start) & !fake]
       if (any(fake) && length(real) > 0L) start[fake] <- real[sample.int(length(real), sum(fake), replace = TRUE)]
       value <- start + round(quantile(stats::runif(nrow(people))))
@@ -477,27 +477,47 @@
   dates
 }
 
-# Keep placeholder dates (months before 1900, such as SPSS's 1582-10-14) at
-# the share the released months give them
+# Keep placeholder dates at the share the released months give them, or else
+# at the summary's count of placeholders (12_date_summary.csv, kit v1.2)
 .clinical_placeholders <- function(value, profile, tables, key) {
   table <- tables$profile_table[tables$table == sub(":[^:]*$", "", key)][1L]
-  months <- .clinical_rows(profile$date_months, table, sub("^.*:", "", key))
+  column <- sub("^.*:", "", key)
+  months <- .clinical_rows(profile$date_months, table, column)
   months <- months[months$stratum_var == "all" & !is.na(months$level), , drop = FALSE]
   counts <- months$n_rows
   counts[is.na(counts)] <- 0
-  early <- months$level < "1900"
-  if (sum(counts) == 0 || !any(early & counts > 0)) return(value)
-  placeholder <- stats::runif(length(value)) < sum(counts[early]) / sum(counts)
-  levels <- months$level[early & counts > 0]
-  picked <- levels[sample.int(length(levels), sum(placeholder), replace = TRUE, prob = counts[early & counts > 0])]
-  value[placeholder] <- .clinical_placeholder_date(picked)
+  early <- .clinical_placeholder_month(months$level) & counts > 0
+  if (sum(counts) > 0 && any(early)) {
+    placeholder <- stats::runif(length(value)) < sum(counts[early]) / sum(counts)
+    levels <- months$level[early]
+    picked <- levels[sample.int(length(levels), sum(placeholder), replace = TRUE, prob = counts[early])]
+    value[placeholder] <- .clinical_placeholder_date(picked)
+    return(value)
+  }
+  .clinical_counted_placeholders(value, .clinical_rows(profile$date_summary, table, column))
+}
+
+# Placeholders at the summary's count when the months show none (each
+# placeholder month may be suppressed while their total isn't); the SPSS zero
+# date stands in for them
+.clinical_counted_placeholders <- function(value, summary) {
+  if (nrow(summary) == 0L || !"n_placeholder" %in% names(summary)) return(value)
+  share <- summary$n_placeholder[[1L]] / summary$n[[1L]]
+  if (!is.na(share) && share > 0) value[stats::runif(length(value)) < share] <- as.Date("1582-10-14")
   value
 }
 
-# The date a placeholder month stands for: SPSS's zero date for 1582-10, the
-# first of the month otherwise
+# Months that stand for unknown dates: up to January 1900, or in 9999 (the
+# kit's cut-off from v1.2, and react-hub H18's for HES and GP dates)
+.clinical_placeholder_month <- function(month) {
+  !is.na(month) & (month <= "1900-01" | startsWith(month, "9999"))
+}
+
+# The date a placeholder month stands for: SPSS's zero date for 1582-10,
+# 9999-12-31 for 9999-12, the first of the month otherwise
 .clinical_placeholder_date <- function(month) {
   out <- as.Date(sprintf("%s-01", month))
   out[month == "1582-10"] <- as.Date("1582-10-14")
+  out[month == "9999-12"] <- as.Date("9999-12-31")
   out
 }

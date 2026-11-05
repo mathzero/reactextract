@@ -1,5 +1,5 @@
 # Writes clinical-candidate/: an invented Clinical Study inventory candidate in
-# the file layout of reactextract's clinical inventory kit. Table paths, column
+# the file layout of reactextract's clinical inventory kit (v1.2). Table paths, column
 # names, counts and values are made up; nothing comes from REACT data. Counts
 # follow the kit's rules (at least 10, multiples of 5, blank when suppressed),
 # and anchored quantiles have only p10 to p90, as the kit writes them.
@@ -19,7 +19,8 @@ codes <- c("n_code_m77", "n_code_m91", "n_code_m92", "n_code_m99", "n_code_m66",
 
 put(frame(source = c("wrangled", "master", "panel", "rnaseq_t0", "gene"),
           group = c("wrangled", "wrangled", "omics", "omics", "omics"), reader = "invented", status = "ok",
-          message = "", size_mb = 1, modified = "2026-01-01", seconds = 1), "inventory/00_sources.csv")
+          message = "", size_mb = 1, modified = "2026-01-01", seconds = 1, kit = "clinical-inventory-v1.2"),
+    "inventory/00_sources.csv")
 put(frame(key = c("cohort_ids", "anchor:sex", "anchor:age_group", "anchor:lc_group", "anchor:route",
                   "anchor:study", "anchor:ethnicity", "identifiers_ambiguous"),
           value = c("invented", "sex_reg", "age_band", "lc_status", "route_reg", "study_src",
@@ -40,13 +41,15 @@ tables <- frame(
   n_cols = c(15, 10, 4, 5, 3, 4, 3, NA, NA, 2, 15, 4)
 )
 put(rbind(cbind(source = "wrangled", tables),
-          frame(source = c("master", rep("panel", 4), rep("rnaseq_t0", 4), "gene"),
-                path = c("combined_data_set", "df_panel_a", "df_panel_long", "df_stack", "panel_lookup",
-                         "abundance", "counts", "length", "countsFromAbundance", "carrier.csv"),
+          frame(source = c("master", rep("panel", 7), rep("rnaseq_t0", 4), "gene"),
+                path = c("combined_data_set", "df_panel_a", "df_panel_long", "df_stack", "names_lookup",
+                         "protein_summary", "qc_record", "panel_unread", "abundance", "counts", "length",
+                         "countsFromAbundance", "carrier.csv"),
                 class = c("tbl_df/tbl/data.frame", rep("tbl_df/tbl/data.frame", 3), "data.frame",
-                          rep("matrix/array", 3), "character", "data.frame"),
-                n_rows = c(410, 240, 1440, 1440, 20, 8, 8, 8, NA, 45),
-                n_cols = c(7, 9, 7, 5, 2, 50, 50, 50, NA, 2))), "inventory/02_structure.csv")
+                          "tbl_df/tbl/data.frame", "data.frame", "data.frame", rep("matrix/array", 3),
+                          "character", "data.frame"),
+                n_rows = c(410, 240, 1440, 1440, 12, 6, NA, 20, 8, 8, 8, NA, 45),
+                n_cols = c(7, 9, 7, 5, 3, 2, 2, 2, 50, 50, 50, NA, 2))), "inventory/02_structure.csv")
 wrangled_tables <- tables[!tables$class %in% "Date", ]
 put(rbind(
   frame(source = "wrangled", table = wrangled_tables$path,
@@ -61,14 +64,15 @@ put(rbind(
         rpp_1 = c(400, 300, 60, 280, NA, 330, 5000, 20, 10, NA), rpp_2 = c(NA, NA, NA, NA, NA, 60, NA, 30, NA, NA),
         rpp_3_5 = c(rep(NA, 7), 50, NA, NA), rpp_6_10 = c(rep(NA, 7), 50, NA, NA),
         rpp_11_plus = c(rep(NA, 7), 50, NA, NA), person_key = "subject_id"),
-  frame(source = c("master", rep("panel", 5), "gene"),
+  frame(source = c("master", rep("panel", 8), "gene"),
         table = c("combined_data_set", "panel_a/samples", "panel_long/samples", "panel_long/long_rows",
-                  "stack:A/samples", "stack/long_rows", "carrier"),
-        visit = NA, n_rows = c(410, 240, 240, 1440, 240, 1440, 45), n_rows_source = NA,
-        n_cols = c(7, 3, 2, 5, 2, 3, 2), has_persons = TRUE, person_level = c(TRUE, rep(FALSE, 5), TRUE),
-        n_persons = c(410, rep(220, 5), 45), n_persons_main = c(300, rep(215, 5), 45), n_rows_no_person = NA,
-        profile_level = "full", rpp_1 = NA, rpp_2 = NA, rpp_3_5 = NA, rpp_6_10 = NA, rpp_11_plus = NA,
-        person_key = NA)
+                  "stack:A/samples", "stack/long_rows", "names_lookup", "protein_summary", "qc_record", "carrier"),
+        visit = NA, n_rows = c(410, 240, 240, 1440, 240, 1440, 12, 6, NA, 45), n_rows_source = NA,
+        n_cols = c(7, 3, 2, 5, 2, 3, 3, 2, 2, 2), has_persons = c(rep(TRUE, 6), FALSE, FALSE, FALSE, TRUE),
+        person_level = c(TRUE, rep(FALSE, 8), TRUE),
+        n_persons = c(410, rep(220, 5), NA, NA, NA, 45), n_persons_main = c(300, rep(215, 5), NA, NA, NA, 45),
+        n_rows_no_person = NA, profile_level = c(rep("full", 8), "structure_only", "full"),
+        rpp_1 = NA, rpp_2 = NA, rpp_3_5 = NA, rpp_6_10 = NA, rpp_11_plus = NA, person_key = NA)
 ), "inventory/03_tables.csv")
 
 col <- function(table, column, class, role, n_nonmissing, n_missing = NA, n_distinct = NA, source = "wrangled") {
@@ -171,12 +175,31 @@ columns <- rbind(
   col("stack/long_rows", "platform", "character", "categorical", 1440, NA, 1, "panel"),
   col("stack/long_rows", "protein", "character", "high_cardinality", 1440, NA, 6, "panel"),
   col("stack/long_rows", "value", "numeric", "continuous", 1440, NA, 1400, "panel"),
+  # reference tables: a name lookup (one row per platform feature), a protein
+  # summary and a structure-only QC record
+  col("names_lookup", "native_name", "character", "high_cardinality", 12, NA, 12, "panel"),
+  col("names_lookup", "common_name", "character", "high_cardinality", 12, NA, 6, "panel"),
+  col("names_lookup", "origin", "character", "categorical", 12, NA, 2, "panel"),
+  col("protein_summary", "common_name", "character", "high_cardinality", 6, NA, 6, "panel"),
+  col("protein_summary", "n_platforms", "integer", "coded_numeric", 6, NA, 1, "panel"),
+  col("qc_record", "step", "character", "categorical", NA, NA, 3, "panel"),
+  col("qc_record", "n_removed", "integer", "coded_numeric", NA, NA, 3, "panel"),
   col("carrier", "REG_CODE", "character", "identifier", 45, NA, 45, "gene"),
   col("carrier", "carrier", "character", "categorical", 45, NA, 2, "gene")
 )
 columns$position <- stats::ave(seq_len(nrow(columns)), columns$table, FUN = seq_along)
 put(columns[c("source", "table", "position", "column", "class", "role", "n_nonmissing", "n_missing",
               "n_distinct")], "inventory/04_columns.csv")
+# source column order of the long tables (the kit's tables split them into
+# sample-level and row-level columns); one class differs from the kit's tables
+put(frame(source = "panel",
+          table = c(rep("panel_long", 7), rep("stack", 5)),
+          position = c(1:7, 1:5),
+          column = c("protein", "subject_id", "value", "sample_ref", "value_norm", "assay_group", "lod",
+                     "platform", "sample_id", "protein", "value", "subject_id"),
+          class = c("character", "character", "numeric", "character", "numeric", "factor", "numeric",
+                    "character", "character", "character", "numeric", "character")),
+    "inventory/04b_source_columns.csv")
 put(frame(source = "invented", set = c("main/Registered", "main/Completed survey"), n = c(300, 270),
           n_main = c(300, 270)), "inventory/08_id_sets.csv")
 
@@ -242,6 +265,8 @@ categorical <- rbind(
   cat_rows("panel_long/long_rows", "assay_group", c("core", "extra"), c(960, 480), source = "panel"),
   cat_rows("stack/long_rows", "platform", "A", 1440, source = "panel"),
   cat_rows("carrier", "carrier", c("Yes", "No"), c(15, 30), source = "gene"),
+  cat_rows("names_lookup", "origin", c("Panel_A", "Panel_Long"), c(6, 6), source = "panel"),
+  cat_rows("protein_summary", "n_platforms", "2", 6, source = "panel"),
   # availability patterns of the main cohort (combined_data_set's flags)
   frame(source = "master", table = "availability_patterns:main_cohort", column = "baseline",
         stratum_var = "all", stratum = "all",
@@ -268,9 +293,14 @@ categorical <- rbind(
 )
 put(categorical, "profile/11_categorical.csv")
 
-summary <- frame(source = "wrangled", table = t1, column = "visit_date", n = 60, n_before_2019_12 = NA,
-                 n_after_run_date = NA)
-summary[qcols] <- as.list(c(NA, "2021-10", "2021-10", "2021-10", "2021-11", "2021-11", "2021-12", "2021-12", NA))
+# placeholders (dates up to 1900-01-01 or in 9999) are counted in
+# n_placeholder and left out of the quantiles; the onset dates' placeholder
+# months are suppressed one by one, so only the count shows them
+summary <- frame(source = "wrangled", table = c(t1, inf), column = c("visit_date", "onset_date"), n = c(60, 1000),
+                 n_placeholder = c(NA, 100), n_before_2019_12 = NA, n_after_run_date = NA)
+summary[qcols] <- list(NA, c("2021-10", "2020-04"), c("2021-10", "2020-04"), c("2021-10", "2020-06"),
+                       c("2021-11", "2020-10"), c("2021-11", "2020-12"), c("2021-12", "2021-01"),
+                       c("2021-12", "2021-01"), NA)
 put(summary, "profile/12_date_summary.csv")
 
 month_rows <- function(table, column, months, n) cat_rows(table, column, months, n)
@@ -280,7 +310,7 @@ put(rbind(
   month_rows(inf, "onset_date", c("2020-04", "2020-06", "2020-10", "2020-12", "2021-01"), c(150, 200, 250, 200, 200)),
   month_rows(t0, "visit_date", months_2021, c(20, 35, 40, 45, 40, 35, 30, 30, 25)),
   month_rows(t0, "sample_time", months_2021, c(20, 30, 35, 40, 35, 35, 30, 25, 20)),
-  month_rows(rr, "record_date", c("2020-06", "2020-09", "2021-01", "2021-03"), c(100, 120, 110, 120))
+  month_rows(rr, "record_date", c("2020-06", "2020-09", "2021-01", "2021-03", "9999-12"), c(100, 120, 110, 120, 20))
 ), "profile/13_date_months.csv")
 
 put(rbind(

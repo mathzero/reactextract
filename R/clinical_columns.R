@@ -138,9 +138,10 @@
   next_month <- as.Date(format(first + 31, "%Y-%m-01"))
   days <- as.numeric(next_month - first)
   value <- first + floor(stats::runif(n) * days)
-  # placeholder months (before 1900) keep the placeholder date, not a random day
-  early <- first < as.Date("1900-01-01")
+  # placeholder months keep the placeholder date, not a random day
+  early <- .clinical_placeholder_month(format(first, "%Y-%m"))
   value[early] <- .clinical_placeholder_date(format(first[early], "%Y-%m"))
+  if (!any(early)) value <- .clinical_counted_placeholders(value, summary)
   value
 }
 
@@ -344,7 +345,7 @@
   related <- startsWith(months$table, sub("[_/].*", "", table$table))
   if (any(related)) months <- months[related, , drop = FALSE]
   months <- months$level
-  months <- sort(unique(months[!is.na(months) & months >= "1900"]))
+  months <- sort(unique(months[!is.na(months) & !.clinical_placeholder_month(months)]))
   name <- tolower(basename(table$table))
   if (class == "Date" && length(months) > 0L) {
     if (grepl("min", name, fixed = TRUE)) value <- rep(as.Date(paste0(months[[1L]], "-01")), n)

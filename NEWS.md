@@ -22,11 +22,14 @@
   with the matching availability flag; values follow each platform's low-rank
   structure and feature quantiles, with tables of the same measurements
   sharing values.
-- `react_clinical_profile()` reads the checked output of the clinical
-  inventory kit from a local folder (`REACTEXTRACT_CLINICAL_PROFILE`), with
-  the v1.1 supplement layered on top (`REACTEXTRACT_CLINICAL_SUPPLEMENT`); no
-  profile is bundled until one is approved. Tests use an invented candidate.
-  `inst/CLINICAL_SYNTHETIC.md` sets out the design and what is still open.
+- `react_clinical_profile()` reads one checked candidate of the clinical
+  inventory kit (v1.2) from a local folder (`REACTEXTRACT_CLINICAL_PROFILE`)
+  and records the kit version that wrote it; no profile is bundled until one
+  is approved. Long proteomics tables take the source files' column order,
+  proteomics reference tables (name lookup, summaries) hold the generated
+  protein names, and placeholder dates appear at the counted rates. Tests use
+  an invented candidate. `inst/CLINICAL_SYNTHETIC.md` sets out the design and
+  what is still open.
 
 # reactextract 0.6.0.9009 (development)
 

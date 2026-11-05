@@ -15,4 +15,7 @@
 "panel","panel_long/long_rows",,1440,,5,TRUE,FALSE,220,215,,"full",,,,,,
 "panel","stack:A/samples",,240,,2,TRUE,FALSE,220,215,,"full",,,,,,
 "panel","stack/long_rows",,1440,,3,TRUE,FALSE,220,215,,"full",,,,,,
+"panel","names_lookup",,12,,3,FALSE,FALSE,,,,"full",,,,,,
+"panel","protein_summary",,6,,2,FALSE,FALSE,,,,"full",,,,,,
+"panel","qc_record",,,,2,FALSE,FALSE,,,,"structure_only",,,,,,
 "gene","carrier",,45,,2,TRUE,TRUE,45,45,,"full",,,,,,

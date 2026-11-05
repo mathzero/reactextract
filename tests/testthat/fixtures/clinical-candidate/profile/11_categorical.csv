@@ -51,6 +51,9 @@
 "panel","stack/long_rows","platform","all","all","A",1,1440,1440
 "gene","carrier","carrier","all","all","Yes",1,15,15
 "gene","carrier","carrier","all","all","No",2,30,30
+"panel","names_lookup","origin","all","all","Panel_A",1,6,6
+"panel","names_lookup","origin","all","all","Panel_Long",2,6,6
+"panel","protein_summary","n_platforms","all","all","2",1,6,6
 "master","availability_patterns:main_cohort","baseline","all","all","has_bloods_t0+has_panel_t0",1,120,120
 "master","availability_patterns:main_cohort","baseline","all","all","has_bloods_t0+has_panel_t0+has_genome",2,55,55
 "master","availability_patterns:main_cohort","baseline","all","all","has_bloods_t0+has_rnaseq_t0+has_panel_t0",3,70,70

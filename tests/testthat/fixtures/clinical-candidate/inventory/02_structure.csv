@@ -15,7 +15,10 @@
 "panel","df_panel_a","tbl_df/tbl/data.frame",240,9
 "panel","df_panel_long","tbl_df/tbl/data.frame",1440,7
 "panel","df_stack","tbl_df/tbl/data.frame",1440,5
-"panel","panel_lookup","data.frame",20,2
+"panel","names_lookup","data.frame",12,3
+"panel","protein_summary","tbl_df/tbl/data.frame",6,2
+"panel","qc_record","data.frame",,2
+"panel","panel_unread","data.frame",20,2
 "rnaseq_t0","abundance","matrix/array",8,50
 "rnaseq_t0","counts","matrix/array",8,50
 "rnaseq_t0","length","matrix/array",8,50

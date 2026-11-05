@@ -105,9 +105,13 @@ react_clinical_omics <- function(source, sources = "all", profile = NULL, n = NU
       next
     }
     table <- tables[tables$table == tools::file_path_sans_ext(path) | tables$table == path, , drop = FALSE]
-    if (nrow(table) == 1L && isTRUE(table$has_persons)) {
+    if (nrow(table) != 1L) next
+    if (isTRUE(table$has_persons)) {
       out[path] <- list(.clinical_omics_person_table(profile, source, table, structure[i, , drop = FALSE],
                                                      people, scale, ids))
+    } else {
+      names <- .clinical_omics_names(platforms, groups, measure, table$table)
+      out[path] <- list(.clinical_omics_reference(profile, source, table, structure[i, , drop = FALSE], names))
     }
   }
   if (single && length(out) == 1L) out[[1L]] else out
@@ -148,12 +152,34 @@ react_clinical_omics <- function(source, sources = "all", profile = NULL, n = NU
   n <- if (unlinked) round(lead$n_samples_profiled * scale) else length(sample_rows)
   u <- .clinical_omics_scores(profile, lead, n, if (unlinked) NULL else sample_rows, visit)
   features <- .clinical_omics_features(profile, lead)$feature
-  # feature names of the group's platforms, mapped to the lead's features as
-  # they are matched
-  alias <- new.env(parent = emptyenv())
-  for (j in seq_along(features)) assign(features[[j]], j, envir = alias)
-  list(rows = if (unlinked) NULL else sample_rows, visit = visit, u = u, lead = lead,
-       features = features, alias = alias, ids = .clinical_omics_sample_ids(profile, lead$source, lead, n))
+  list(rows = if (unlinked) NULL else sample_rows, visit = visit, u = u, lead = lead, platforms = platforms,
+       features = features, maps = .clinical_omics_maps(profile, platforms, features),
+       ids = .clinical_omics_sample_ids(profile, lead$source, lead, n))
+}
+
+# For each platform of a group, the group's (first platform's) feature that
+# each of its features stands for: by name (including names already matched
+# for an earlier platform of the group), then by identical quantiles (a
+# stacked table can name proteins differently but holds the same values),
+# then by position
+.clinical_omics_maps <- function(profile, platforms, features) {
+  signature <- function(f) do.call(paste, c(lapply(f[.clinical_quantile_columns], format), sep = "|"))
+  lead <- .clinical_omics_features(profile, platforms[1L, , drop = FALSE])
+  known <- stats::setNames(seq_along(features), features)
+  maps <- list()
+  for (i in seq_len(nrow(platforms))) {
+    rows <- .clinical_omics_features(profile, platforms[i, , drop = FALSE])
+    at <- unname(known[rows$feature])
+    if (anyNA(at)) {
+      by_quantiles <- match(signature(rows), signature(lead))
+      at[is.na(at)] <- by_quantiles[is.na(at)]
+    }
+    at[is.na(at)] <- ((seq_along(at) - 1L) %% length(features) + 1L)[is.na(at)]
+    new <- !rows$feature %in% names(known)
+    known <- c(known, stats::setNames(at[new], rows$feature[new]))
+    maps[[platforms$platform[[i]]]] <- stats::setNames(at, rows$feature)
+  }
+  maps
 }
 
 # The availability flag for a platform at a visit: the flag (ending _t0 or
@@ -224,23 +250,12 @@ react_clinical_omics <- function(source, sources = "all", profile = NULL, n = NU
   stats::pnorm(z)
 }
 
-# Values of one platform's features at the group's probabilities, mapped to
-# the group's features by name (including names already matched for another
-# platform of the group), then by identical quantiles, then by position;
-# transformed back where the kit profiled log2(x + 1)
+# Values of one platform's features at the group's probabilities (through
+# the group's feature map), transformed back where the kit profiled
+# log2(x + 1)
 .clinical_omics_values <- function(profile, platform, measure) {
   features <- .clinical_omics_features(profile, platform)
-  at <- vapply(features$feature, function(name) {
-    if (exists(name, envir = measure$alias, inherits = FALSE)) get(name, envir = measure$alias) else NA_integer_
-  }, integer(1L), USE.NAMES = FALSE)
-  signature <- function(f) do.call(paste, c(lapply(f[.clinical_quantile_columns], format), sep = "|"))
-  lead <- .clinical_omics_features(profile, measure$lead)
-  if (anyNA(at) && nrow(lead) > 0L) {
-    by_quantiles <- match(signature(features), signature(lead))
-    at[is.na(at)] <- match(lead$feature[by_quantiles[is.na(at)]], measure$features)
-  }
-  at[is.na(at)] <- ((seq_along(at) - 1L) %% length(measure$features) + 1L)[is.na(at)]
-  for (j in seq_along(at)) assign(features$feature[[j]], at[[j]], envir = measure$alias)
+  at <- unname(measure$maps[[platform$platform]])
   n <- nrow(measure$u)
   out <- matrix(NA_real_, n, nrow(features), dimnames = list(NULL, features$feature))
   for (j in seq_len(nrow(features))) {
@@ -297,7 +312,90 @@ react_clinical_omics <- function(source, sources = "all", profile = NULL, n = NU
   }
   data <- if (length(parts) == 1L) parts[[1L]] else do.call(rbind, .clinical_align(parts))
   rownames(data) <- NULL
+  order <- profile$source_columns[profile$source_columns$source == source &
+                                    profile$source_columns$table == sub(":.*", "", platforms$platform[[1L]]), ,
+                                  drop = FALSE]
+  if (nrow(order) > 0L) data <- .clinical_source_order(data, order)
   class(data) <- classes
+  data
+}
+
+# A table's columns in the source file's order and classes
+# (04b_source_columns.csv); a column the kit's tables don't hold is missing
+.clinical_source_order <- function(data, order) {
+  order <- order[order(order$position), , drop = FALSE]
+  out <- lapply(seq_len(nrow(order)), function(i) {
+    name <- order$column[[i]]
+    if (name %in% names(data)) .clinical_as_class(data[[name]], order$class[[i]]) else
+      .clinical_na(order$class[[i]], nrow(data))
+  })
+  names(out) <- order$column
+  data <- as.data.frame(out, stringsAsFactors = FALSE, optional = TRUE)
+  names(data) <- order$column
+  data
+}
+
+# Protein names for a source's reference tables (such as a name lookup):
+# each platform's own names, with the name the group's stacked table uses
+# for the same protein. Platforms whose names share a word with the table's
+# are used if there are any.
+.clinical_omics_names <- function(platforms, groups, measure, table) {
+  if (nrow(platforms) == 0L) return(data.frame(own = character(), clean = character(), platform = character()))
+  words <- function(x) strsplit(tolower(x), "[^a-z0-9]+")[[1L]]
+  mine <- vapply(platforms$platform, function(p) length(intersect(words(sub(":.*", "", p)), words(table))) > 0L,
+                 logical(1L))
+  out <- list()
+  for (group in unique(groups)) {
+    m <- measure(group)
+    stacked <- m$platforms$platform[!is.na(m$platforms$split)]
+    clean <- if (length(stacked) > 0L) {
+      map <- m$maps[[stacked[[1L]]]]
+      names(map)[match(seq_along(m$features), map)]
+    } else m$features
+    for (platform in m$platforms$platform) {
+      if (platform %in% stacked || (any(mine) && !platform %in% platforms$platform[mine])) next
+      map <- m$maps[[platform]]
+      out[[length(out) + 1L]] <- data.frame(own = names(map), clean = clean[map], platform = sub(":.*", "", platform),
+                                            group = group, stringsAsFactors = FALSE)
+    }
+  }
+  names <- if (length(out) == 0L) data.frame(own = character(), clean = character(), platform = character(),
+                                             group = integer()) else do.call(rbind, out)
+  # one row per protein name and group: tables of the same measurements (wide
+  # and long) share their names
+  names <- names[!duplicated(names[c("own", "group")]), , drop = FALSE]
+  attr(names, "matched") <- any(mine)
+  names
+}
+
+# A reference table of an omics source (no people): generated from its
+# profile, with its name columns (high cardinality text) holding the
+# source's protein names: a platform's own name in the first, the stacked
+# table's name for the same protein in the others. A single name column
+# holds the matched platforms' own names, or else the stacked table's names.
+.clinical_omics_reference <- function(profile, source, table, structure, names) {
+  table$profile_table <- table$table
+  table$class <- if (grepl("data.frame", structure$class, fixed = TRUE)) structure$class else "data.frame"
+  data <- .clinical_table(profile, table, NULL, NULL, source = source)
+  columns <- .clinical_rows(profile$columns, table$table, source = source)
+  name_columns <- columns$column[columns$role == "high_cardinality" & columns$class == "character"]
+  n <- nrow(data)
+  if (n == 0L || length(name_columns) == 0L || nrow(names) == 0L) return(data)
+  if (length(name_columns) == 1L) {
+    distinct <- unique(if (isTRUE(attr(names, "matched"))) names$own else names$clean)
+    data[[name_columns]] <- distinct[(seq_len(n) - 1L) %% length(distinct) + 1L]
+    return(data)
+  }
+  pick <- (seq_len(n) - 1L) %% nrow(names) + 1L
+  data[[name_columns[[1L]]]] <- names$own[pick]
+  for (name in name_columns[-1L]) data[[name]] <- names$clean[pick]
+  # a categorical column whose levels are the platforms' names records the platform
+  categorical <- .clinical_rows(profile$categorical, table$table, source = source)
+  for (name in columns$column[columns$role == "categorical" & columns$class == "character"]) {
+    levels <- unique(categorical$level[categorical$column == name & categorical$stratum_var == "all"])
+    at <- match(tolower(names$platform[pick]), tolower(levels))
+    if (length(levels) > 0L && !anyNA(at)) data[[name]] <- levels[at]
+  }
   data
 }
 

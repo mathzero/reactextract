@@ -1,7 +1,7 @@
 # The fixture is an invented candidate in the inventory kit's layout; see
 # fixtures/make-clinical-candidate.R
 fixture <- test_path("fixtures", "clinical-candidate")
-profile <- react_clinical_profile(fixture, supplement = "")
+profile <- react_clinical_profile(fixture)
 source <- react_synthetic(n_per_round = c(REACT1_R08 = 400L, REACT2_S5_R05 = 300L), seed = 3L)
 gelc <- react_clinical(source, profile = profile)
 reg <- gelc$registration_data
@@ -14,6 +14,8 @@ leaf <- function(x, path) Reduce(function(node, name) node[[name]], strsplit(pat
 test_that("the profile reads the kit's files, including empty ones", {
   expect_s3_class(profile, "react_clinical_profile")
   expect_identical(profile$status, "local_candidate")
+  expect_identical(profile$version, "clinical-inventory-v1.2")
+  expect_identical(nrow(profile$source_columns), 12L)
   expect_identical(unname(profile$anchors[["lc_group"]]), "lc_status")
   expect_identical(nrow(profile$availability_pairs), 0L)
   expect_identical(nrow(profile$visit_pairs), 2L)
@@ -42,26 +44,6 @@ test_that("files changed since the candidate was written are refused", {
   utils::write.csv(data.frame(file = "inventory/03_tables.csv", md5 = md5),
                    file.path(copy, "manifest.csv"), row.names = FALSE)
   expect_identical(nrow(react_clinical_profile(copy)$manifest), 1L)
-})
-
-test_that("a supplement replaces the rows of the sources it lists", {
-  supplement <- file.path(withr::local_tempdir(), "supplement")
-  dir.create(file.path(supplement, "inventory"), recursive = TRUE)
-  dir.create(file.path(supplement, "profile"))
-  for (file in c("inventory/00_sources.csv", "inventory/02_structure.csv", "inventory/03_tables.csv",
-                 "inventory/04_columns.csv", "profile/10_numeric.csv")) {
-    file.copy(file.path(fixture, file), file.path(supplement, file))
-  }
-  numeric <- utils::read.csv(file.path(supplement, "profile/10_numeric.csv"), check.names = FALSE)
-  changed <- numeric$column == "sys_bp" & numeric$stratum_var == "all" & grepl("t0$", numeric$table)
-  numeric$p50[changed] <- 999
-  utils::write.csv(numeric, file.path(supplement, "profile/10_numeric.csv"), row.names = FALSE, na = "")
-  merged <- react_clinical_profile(fixture, supplement = supplement)
-  rows <- merged$numeric[merged$numeric$column == "sys_bp" & merged$numeric$stratum_var == "all", ]
-  expect_identical(sort(rows$p50), c(129, 999))
-  expect_identical(nrow(merged$structure), nrow(profile$structure))
-  # files the supplement lacks (or left empty) keep the first run's rows
-  expect_identical(nrow(merged$categorical), nrow(profile$categorical))
 })
 
 test_that("tables have the inventory's paths, column names, order and classes", {
@@ -155,7 +137,9 @@ test_that("values follow the profile's distributions and anchors", {
 
 test_that("dates come from released months or month quantiles", {
   log <- gelc$infection_log
-  expect_true(all(format(log$onset_date, "%Y-%m") %in% c(NA, "2020-04", "2020-06", "2020-10", "2020-12", "2021-01")))
+  # (plus counted placeholders, tested below)
+  expect_true(all(format(log$onset_date, "%Y-%m") %in%
+                    c(NA, "1582-10", "2020-04", "2020-06", "2020-10", "2020-12", "2021-01")))
   summary <- profile$date_summary
   dates <- .hes_with_seed(1L, .clinical_draw_dates(profile$date_months[0, ], summary, 200L))
   expect_true(all(format(dates, "%Y-%m") %in% c("2021-10", "2021-11", "2021-12")))
@@ -180,7 +164,17 @@ test_that("dates in different tables follow the timing intervals", {
 test_that("placeholder dates are kept, but don't start intervals", {
   expect_true(as.Date("1582-10-14") %in% reg$reg_date)
   expect_true(all(t0$visit_date > as.Date("1900-01-01")))
-  expect_identical(.clinical_placeholder_date(c("1582-10", "1899-12")), as.Date(c("1582-10-14", "1899-12-01")))
+  # a 9999 month gives its placeholder date
+  expect_true(any(format(gelc$react_records$record_date, "%Y-%m-%d") == "9999-12-31"))
+  # placeholders only counted in the summary (their months suppressed) still appear, at about that share
+  onset <- gelc$infection_log$onset_date
+  share <- mean(onset[!is.na(onset)] == as.Date("1582-10-14"))
+  expect_gt(share, 0.03)
+  expect_lt(share, 0.2)
+  expect_identical(.clinical_placeholder_month(c("1582-10", "1900-01", "1900-02", "9999-12", NA)),
+                   c(TRUE, TRUE, FALSE, TRUE, FALSE))
+  expect_identical(.clinical_placeholder_date(c("1582-10", "1899-12", "9999-12")),
+                   as.Date(c("1582-10-14", "1899-12-01", "9999-12-31")))
 })
 
 test_that("follow-up values are correlated with the same person's baseline values", {
@@ -309,8 +303,8 @@ panel <- omics$panel
 
 test_that("omics files have the structure of the real files", {
   expect_named(omics, c("panel", "rnaseq_t0", "gene"))
-  # the lookup table wasn't profiled, so it is left out
-  expect_named(panel, c("df_panel_a", "df_panel_long", "df_stack"))
+  # a table the kit didn't inventory is left out; reference tables are kept
+  expect_named(panel, c("df_panel_a", "df_panel_long", "df_stack", "names_lookup", "protein_summary", "qc_record"))
   wide <- panel$df_panel_a
   expect_identical(class(wide), c("tbl_df", "tbl", "data.frame"))
   expect_identical(names(wide), c("subject_id", "sample_id", "timepoint", paste0("f", 1:6)))
@@ -318,7 +312,10 @@ test_that("omics files have the structure of the real files", {
   expect_true(all(grepl("^S[0-9]{5}$", wide$sample_id)))
   long <- panel$df_panel_long
   expect_identical(nrow(long), 240L * 6L)
-  expect_setequal(names(long), c("subject_id", "sample_ref", "protein", "assay_group", "value", "value_norm", "lod"))
+  # long tables take the source file's column order and classes (04b_source_columns.csv)
+  expect_identical(names(long), c("protein", "subject_id", "value", "sample_ref", "value_norm", "assay_group", "lod"))
+  expect_s3_class(long$assay_group, "factor")
+  expect_identical(names(panel$df_stack), c("platform", "sample_id", "protein", "value", "subject_id"))
   # a column with no more values than features describes the feature
   expect_identical(nrow(unique(long[c("protein", "assay_group")])), 6L)
   expect_identical(unique(panel$df_stack$platform), "A")
@@ -355,6 +352,23 @@ test_that("tables holding the same measurements agree", {
   stack <- as.data.frame(panel$df_stack)
   expect_equal(stack$value, long$value)
   expect_identical(stack$sample_id, long$sample_ref)
+})
+
+test_that("reference tables hold the generated protein names", {
+  lookup <- as.data.frame(panel$names_lookup)
+  expect_identical(nrow(lookup), 12L)
+  # each platform's own name with the stacked table's name for the same protein
+  expect_identical(lookup$common_name[lookup$native_name == "f1"], "P6")
+  expect_identical(lookup$common_name[lookup$native_name == "P3"], "P3")
+  # the platform column takes the platforms' names in the column's own spelling
+  expect_identical(lookup$origin[lookup$native_name == "f1"], "Panel_A")
+  expect_identical(lookup$origin[lookup$native_name == "P3"], "Panel_Long")
+  summary <- as.data.frame(panel$protein_summary)
+  expect_setequal(summary$common_name, paste0("P", 1:6))
+  expect_true(all(summary$common_name %in% panel$df_stack$protein))
+  # a structure-only table has its columns and no rows
+  expect_identical(nrow(panel$qc_record), 0L)
+  expect_identical(names(panel$qc_record), c("step", "n_removed"))
 })
 
 test_that("follow-up omics samples are correlated with baseline samples", {
