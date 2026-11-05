@@ -1,8 +1,9 @@
 # Synthetic REACT Clinical Study data (draft design)
 
-Status: draft, 5 November 2026. The generator runs on a local inventory
-candidate (`clinical-inventory-v1.2`) or on invented fixtures. No profile
-from REACT aggregates is bundled yet.
+Status: draft, 5 November 2026. The generator runs on the bundled profile
+`clinical-profile-v1` (formally approved for release on 5 November 2026), on
+a local inventory candidate (`clinical-inventory-v1.2`) for development, or on
+invented fixtures in the tests.
 
 `react_clinical()` returns the REACT Clinical Study's wrangled release: the
 nested list that the canonical wrangling pipeline saves as
@@ -11,7 +12,7 @@ same synthetic cohort. As with `react_extract()` and `react_hes()`, only the
 source changes for the wrangled list:
 
 ```r
-profile <- react_clinical_profile()          # path from REACTEXTRACT_CLINICAL_PROFILE
+profile <- react_clinical_profile()          # bundled, or REACTEXTRACT_CLINICAL_PROFILE
 source  <- react_synthetic(seed = 1L)
 gelc    <- react_clinical(source, profile = profile)
 omics   <- react_clinical_omics(source, sources = "proteomics", profile = profile)
@@ -57,22 +58,31 @@ had stopped on kit bugs. Each candidate has an `inventory/` folder
 (structure) and a `profile/` folder (distributions). The kit's `README.md`
 and `REVIEWER.md` explain each file.
 
-Until a profile derived from it is approved and checksum-pinned, the package
-bundles nothing from it:
+The candidate itself is never distributed:
 
-- `react_clinical_profile()` reads one candidate from a local path (by
-  default `REACTEXTRACT_CLINICAL_PROFILE`) and verifies its `manifest.csv`
-  checksums. The profile's `version` is the kit version recorded in
-  `00_sources.csv`. Files a candidate lacks (an earlier kit wrote fewer) read
-  as empty tables;
+- `scripts/clinical/01_build_clinical_profile.R` builds the bundled profile
+  `clinical-profile-v1` (`inst/extdata/clinical-profile.rds`) from it: only
+  what the generator reads, suppressed level counts as zero, and a check that
+  no count of people or rows lies between 1 and 9. `profile$sources` records
+  the SHA-256 of every candidate file. `scripts/clinical/README.md` lists what
+  is kept and left out, and `DISCLOSURE_REVIEW.md` what would become public;
+- by default, `react_clinical_profile()` returns the bundled profile, but only
+  when `inst/extdata/clinical-profile-approval.csv` says `formally_approved`
+  and its SHA-256 matches the one pinned in `R/clinical_profile.R` (as for
+  `hes-profile-v1`);
+- for development, `react_clinical_profile(path)` (by default
+  `REACTEXTRACT_CLINICAL_PROFILE`) reads a candidate folder and verifies its
+  `manifest.csv` checksums. The profile's `version` is then the kit version
+  recorded in `00_sources.csv`. Files a candidate lacks (an earlier kit wrote
+  fewer) read as empty tables;
 - the package's tests use a small invented candidate in the v1.2 layout
   (`tests/testthat/fixtures/clinical-candidate/`, written by
   `make-clinical-candidate.R` beside it). It copies the kit's file layout and
   disclosure rules, not REACT content: table paths, column names and values
   are invented;
-- nothing from the candidate, including column names and counts, is
-  committed. The profile object records the folder path and the candidate's
-  files and checksums, and is marked `local_candidate`.
+- nothing from the candidate beyond the approved profile is committed. The
+  release profile produces the same synthetic data as the candidate it was
+  built from (a test checks this on the fixture).
 
 ## The wrangled list
 

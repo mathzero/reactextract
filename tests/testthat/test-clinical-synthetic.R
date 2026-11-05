@@ -27,10 +27,29 @@ test_that("the profile reads the kit's files, including empty ones", {
   expect_true("999999999" %in% profile$id_shapes$level)
 })
 
-test_that("a missing profile path says how to set one", {
-  expect_error(react_clinical_profile(""), "REACTEXTRACT_CLINICAL_PROFILE")
-  withr::local_envvar(REACTEXTRACT_CLINICAL_PROFILE = "")
-  expect_error(react_clinical(source), "No approved Clinical Study profile")
+test_that("the bundled profile loads only when approved and its checksum matches", {
+  dir <- withr::local_tempdir()
+  path <- file.path(dir, "clinical-profile.rds")
+  saveRDS(list(version = "test"), path)
+  sha <- .sha256_file(path)
+  approval <- file.path(dir, "approval.csv")
+  write_approval <- function(status, sha256 = sha) {
+    utils::write.csv(data.frame(profile_release = "clinical-profile-v1", profile_sha256 = sha256,
+                                approval_status = status), approval, row.names = FALSE)
+  }
+  load <- function(pinned = sha, at = path) {
+    .clinical_bundled_profile(refresh = TRUE, path = at, approval_path = approval, pinned = pinned)
+  }
+  write_approval("pending_review")
+  expect_error(load(), "isn't approved for release yet \\(status: pending_review\\)")
+  expect_error(load(), "REACTEXTRACT_CLINICAL_PROFILE")
+  write_approval("formally_approved")
+  expect_identical(load()$version, "test")
+  expect_error(load(pinned = strrep("0", 64)), "checksum mismatch")
+  write_approval("formally_approved", strrep("0", 64))
+  expect_error(load(), "approval record is invalid")
+  expect_error(load(at = ""), "No Clinical Study profile is bundled")
+  .reactextract_env$clinical_profile <- NULL
 })
 
 test_that("files changed since the candidate was written are refused", {
@@ -381,3 +400,69 @@ test_that("follow-up omics samples are correlated with baseline samples", {
   expect_error(react_clinical_omics(source, sources = "bloods", profile = profile), "Unknown or unprofiled omics source")
 })
 
+test_that("the release profile keeps only what the generator reads, and generates the same data", {
+  sources <- data.frame(file = "inventory/00_sources.csv", origin = "invented", sha256 = "0")
+  release <- .clinical_profile_release(profile, "clinical-profile-test", sources)
+  expect_s3_class(release, "react_clinical_profile")
+  expect_identical(release$version, "clinical-profile-test")
+  expect_identical(release$kit, "clinical-inventory-v1.2")
+  expect_identical(release$sources, sources)
+  dropped <- c("source_issues", "context", "id_sets", "availability", "availability_pairs", "omics_r2",
+               "omics_tokens", "path")
+  expect_false(any(dropped %in% names(release)))
+  expect_false("n_persons" %in% names(release$categorical))
+  expect_false(anyNA(release$categorical$n_rows))
+  expect_false(anyNA(release$date_months$n_rows))
+  # from combined_data_set only the anchors' counts and the availability patterns
+  master <- release$categorical[release$categorical$source == "master", ]
+  expect_true(all(master$column %in% profile$anchors))
+  expect_false(".rows_per_person" %in% release$numeric$column)
+  expect_identical(release$omics_samples$stat, "library_size")
+  expect_identical(react_clinical(source, profile = release), gelc)
+  expect_identical(react_clinical_omics(source, profile = release), omics)
+})
+
+test_that("labels can be made neutral everywhere they appear", {
+  coarse <- .clinical_neutral_levels(profile, c(grip_hand = "Hand %02d"))
+  before <- profile$categorical[profile$categorical$column == "grip_hand", ]
+  after <- coarse$categorical[coarse$categorical$column == "grip_hand", ]
+  expect_true(all(grepl("^Hand [0-9]{2}$", after$level)))
+  expect_identical(length(unique(after$level)), length(unique(before$level)))
+  expect_false(any(after$level %in% before$level))
+  # numbered by descending count, with the counts kept
+  overall <- after[after$stratum_var == "all", ]
+  expect_identical(overall$level[which.max(overall$n_rows)], "Hand 01")
+  expect_identical(sort(overall$n_rows), sort(before$n_rows[before$stratum_var == "all"]))
+  expect_identical(coarse$categorical[coarse$categorical$column != "grip_hand", ],
+                   profile$categorical[profile$categorical$column != "grip_hand", ])
+  generated <- react_clinical(source, tables = "clinic_data/clinical_tests/tests_t0", profile = coarse)
+  expect_true(all(generated$clinic_data$clinical_tests$tests_t0$grip_hand %in% c(NA, "Hand 01", "Hand 02")))
+})
+
+test_that("the built profile holds only neutral labels for the coarsened columns", {
+  path <- test_path("..", "..", "inst", "extdata", "clinical-profile.rds")
+  if (!file.exists(path)) path <- system.file("extdata", "clinical-profile.rds", package = "reactextract")
+  skip_if(!nzchar(path) || !file.exists(path), "No built clinical profile")
+  built <- readRDS(path)
+  expected <- list(site_name = c("^Site [0-9]{2}$", 8L), clinic_location = c("^LC site [0-9]{2}$", 23L),
+                   sending_org_code = c("^ORG[0-9]{2}$", 7L), panel_lot_nr = c("^LOT[0-9]{2}$", 1L))
+  for (column in names(expected)) {
+    levels <- unique(built$categorical$level[built$categorical$column == column])
+    expect_true(all(grepl(expected[[column]][[1L]], levels)), info = column)
+    expect_identical(length(levels), as.integer(expected[[column]][[2L]]), info = column)
+  }
+})
+
+test_that("the approved bundled profile loads by default and generates tables", {
+  skip_if(!nzchar(system.file("extdata", "clinical-profile.rds", package = "reactextract")),
+          "No bundled clinical profile")
+  bundled <- react_clinical_profile("", refresh = TRUE)
+  expect_s3_class(bundled, "react_clinical_profile")
+  expect_identical(bundled$version, "clinical-profile-v1")
+  expect_identical(bundled$kit, "clinical-inventory-v1.2")
+  small <- react_clinical(source, tables = "registration_data", profile = bundled, n = 200L)
+  expected <- bundled$columns[bundled$columns$source == "wrangled" & bundled$columns$table == "registration_data", ]
+  expected <- expected[order(expected$position), ]
+  expect_identical(names(small$registration_data), expected$column)
+  expect_identical(nrow(small$registration_data), 200L)
+})

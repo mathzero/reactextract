@@ -4,27 +4,33 @@
 \alias{react_clinical_profile}
 \title{Read a Clinical Study profile}
 \usage{
-react_clinical_profile(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROFILE"))
+react_clinical_profile(
+  path = Sys.getenv("REACTEXTRACT_CLINICAL_PROFILE"),
+  refresh = FALSE
+)
 }
 \arguments{
-\item{path}{The candidate folder.}
+\item{path}{A local candidate folder, or \code{""} for the bundled profile.}
+
+\item{refresh}{Re-read and re-verify the bundled profile.}
 }
 \value{
-A \code{react_clinical_profile} object: a list of the kit's tables, the
-anchors, the kit version that wrote the candidate (from
-\verb{00_sources.csv}), the folder path and the candidate's files and
-checksums (\code{sources}).
+A \code{react_clinical_profile} object: the generator's tables, the
+anchors, the profile and kit versions, and the input files' checksums
+(\code{sources}).
 }
 \description{
-Reads the checked output of reactextract's clinical inventory kit
-(\code{clinical-inventory-v1.2} or later): the candidate folder holding
-\verb{inventory/} and \verb{profile/}. \code{\link[=react_clinical]{react_clinical()}} and
-\code{\link[=react_clinical_omics]{react_clinical_omics()}} generate synthetic Clinical Study data from it.
+Returns the profile that \code{\link[=react_clinical]{react_clinical()}} and \code{\link[=react_clinical_omics]{react_clinical_omics()}}
+generate synthetic Clinical Study data from: by default the profile bundled
+with the package (\code{clinical-profile-v1}), built from the checked output of
+reactextract's clinical inventory kit. The bundled profile is used only
+when its approval record says it is formally approved for release and its
+SHA-256 matches the one pinned in the package.
 }
 \details{
-No profile derived from REACT aggregates is bundled with the package yet.
-Until one is approved and checksum-pinned, the candidate is read from a
-local folder, by default the one named by the environment variable
-\code{REACTEXTRACT_CLINICAL_PROFILE}. Don't copy the candidate into a project
-or commit it. See \code{inst/CLINICAL_SYNTHETIC.md}.
+For development, \code{path} (by default the environment variable
+\code{REACTEXTRACT_CLINICAL_PROFILE}) can instead name a local candidate folder
+written by the kit (\code{clinical-inventory-v1.2} or later, holding
+\verb{inventory/} and \verb{profile/}). Don't copy a candidate into a project or
+commit it. See \code{inst/CLINICAL_SYNTHETIC.md}.
 }

@@ -68,28 +68,28 @@
 
 #' Read a Clinical Study profile
 #'
-#' Reads the checked output of reactextract's clinical inventory kit
-#' (`clinical-inventory-v1.2` or later): the candidate folder holding
-#' `inventory/` and `profile/`. [react_clinical()] and
-#' [react_clinical_omics()] generate synthetic Clinical Study data from it.
+#' Returns the profile that [react_clinical()] and [react_clinical_omics()]
+#' generate synthetic Clinical Study data from: by default the profile bundled
+#' with the package (`clinical-profile-v1`), built from the checked output of
+#' reactextract's clinical inventory kit. The bundled profile is used only
+#' when its approval record says it is formally approved for release and its
+#' SHA-256 matches the one pinned in the package.
 #'
-#' No profile derived from REACT aggregates is bundled with the package yet.
-#' Until one is approved and checksum-pinned, the candidate is read from a
-#' local folder, by default the one named by the environment variable
-#' `REACTEXTRACT_CLINICAL_PROFILE`. Don't copy the candidate into a project
-#' or commit it. See `inst/CLINICAL_SYNTHETIC.md`.
+#' For development, `path` (by default the environment variable
+#' `REACTEXTRACT_CLINICAL_PROFILE`) can instead name a local candidate folder
+#' written by the kit (`clinical-inventory-v1.2` or later, holding
+#' `inventory/` and `profile/`). Don't copy a candidate into a project or
+#' commit it. See `inst/CLINICAL_SYNTHETIC.md`.
 #'
-#' @param path The candidate folder.
-#' @return A `react_clinical_profile` object: a list of the kit's tables, the
-#'   anchors, the kit version that wrote the candidate (from
-#'   `00_sources.csv`), the folder path and the candidate's files and
-#'   checksums (`sources`).
+#' @param path A local candidate folder, or `""` for the bundled profile.
+#' @param refresh Re-read and re-verify the bundled profile.
+#' @return A `react_clinical_profile` object: the generator's tables, the
+#'   anchors, the profile and kit versions, and the input files' checksums
+#'   (`sources`).
 #' @export
-react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROFILE")) {
+react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROFILE"), refresh = FALSE) {
   if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
-    stop("No approved Clinical Study profile is bundled yet. Set REACTEXTRACT_CLINICAL_PROFILE ",
-         "to a released clinical inventory candidate folder (the one holding inventory/ and ",
-         "profile/), or pass `path`.", call. = FALSE)
+    return(.clinical_bundled_profile(refresh))
   }
   base <- .clinical_read_candidate(path)
   status <- base$source_status
@@ -106,6 +106,112 @@ react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROF
     ),
     class = "react_clinical_profile"
   )
+}
+
+# Checksum of the bundled Clinical Study profile; its approval is recorded in
+# inst/extdata/clinical-profile-approval.csv
+.clinical_profile_sha256 <- "ac78e27a67c33630d14c28a1f5e29ae94efb18ced711af0821db45233d03eaf0"
+
+# The bundled profile, used only when it is present, its checksum matches the
+# pinned one and its approval record says formally_approved
+.clinical_bundled_profile <- function(refresh = FALSE,
+                                      path = system.file("extdata", "clinical-profile.rds", package = "reactextract"),
+                                      approval_path = system.file("extdata", "clinical-profile-approval.csv",
+                                                                  package = "reactextract"),
+                                      pinned = .clinical_profile_sha256) {
+  if (!isTRUE(refresh) && !is.null(.reactextract_env$clinical_profile)) {
+    return(.reactextract_env$clinical_profile)
+  }
+  development <- paste0("For development, set REACTEXTRACT_CLINICAL_PROFILE to a local clinical ",
+                        "inventory candidate folder, or pass `path`.")
+  if (!nzchar(path)) {
+    stop("No Clinical Study profile is bundled with this version of reactextract. ", development, call. = FALSE)
+  }
+  observed <- .sha256_file(path)
+  if (!identical(observed, pinned)) {
+    stop("Clinical Study profile checksum mismatch. Expected ", pinned, "; observed ", observed, ". ",
+         development, call. = FALSE)
+  }
+  approval <- if (nzchar(approval_path)) .read_literal_csv(approval_path) else data.frame()
+  if (nrow(approval) != 1L || !all(c("profile_sha256", "approval_status") %in% names(approval)) ||
+      approval$profile_sha256[[1L]] != pinned) {
+    stop("The bundled Clinical Study profile's approval record is invalid.", call. = FALSE)
+  }
+  if (approval$approval_status[[1L]] != "formally_approved") {
+    stop("The bundled Clinical Study profile isn't approved for release yet (status: ",
+         approval$approval_status[[1L]], "). ", development, call. = FALSE)
+  }
+  .reactextract_env$clinical_profile <- readRDS(path)
+  .reactextract_env$clinical_profile
+}
+
+# The release profile built from a candidate (scripts/clinical/): only what
+# the generator reads. Kept are the wrangled list, the omics sources the
+# generator makes, and, from combined_data_set.rds, the anchors' counts and
+# the availability patterns. Columns the generator doesn't read are dropped,
+# suppressed level counts become zero (they are never reconstructed), and the
+# kit's folder listing, environment, provenance, ID sets, source issues,
+# per-flag availability, component R2 and tokens are left out. `sources`
+# records the candidate's files and checksums.
+.clinical_profile_release <- function(profile, version, sources) {
+  .clinical_check_profile(profile)
+  generated <- c(.clinical_release_source, .clinical_omics_sources(profile))
+  anchor_source <- unique(.clinical_anchor_rows(profile, unname(profile$anchors))$source)
+  q <- .clinical_quantile_columns
+  pick <- function(data, columns, keep = data$source %in% generated) {
+    data <- data[keep, intersect(columns, names(data)), drop = FALSE]
+    rownames(data) <- NULL
+    data
+  }
+  levels <- function(data, keep = data$source %in% generated) {
+    data <- pick(data, c("source", "table", "column", "stratum_var", "stratum", "level", "level_order", "n_rows"),
+                 keep)
+    data$n_rows[is.na(data$n_rows)] <- 0
+    data
+  }
+  codes <- paste0("n_code_", sub("-", "m", .clinical_missing_codes))
+  categorical <- profile$categorical
+  anchor_rows <- categorical$source %in% anchor_source & categorical$column %in% profile$anchors
+  patterns <- profile$availability_patterns
+  out <- list(
+    version = version,
+    kit = profile$kit,
+    status = "release",
+    built = format(Sys.Date()),
+    sources = sources,
+    anchors = profile$anchors,
+    source_status = pick(profile$source_status, c("source", "group", "status", "kit")),
+    structure = pick(profile$structure, c("source", "path", "class", "n_rows", "n_cols")),
+    tables = pick(profile$tables, c("source", "table", "visit", "n_rows", "n_cols", "has_persons", "person_level",
+                                    "n_persons", "n_persons_main", "profile_level", "rpp_1", "rpp_2", "rpp_3_5",
+                                    "rpp_6_10", "rpp_11_plus")),
+    columns = pick(profile$columns, c("source", "table", "position", "column", "class", "role", "n_nonmissing",
+                                      "n_missing", "n_distinct")),
+    source_columns = pick(profile$source_columns, c("source", "table", "position", "column", "class")),
+    numeric = pick(profile$numeric, c("source", "table", "column", "stratum_var", "stratum", "n",
+                                      "share_integer", "decimals", q, codes),
+                   profile$numeric$source %in% generated & profile$numeric$column != ".rows_per_person"),
+    categorical = levels(categorical, (categorical$source %in% generated & !categorical$source %in% anchor_source) |
+                           anchor_rows),
+    availability_patterns = levels(patterns, startsWith(patterns$table, "availability_patterns:")),
+    date_summary = pick(profile$date_summary, c("source", "table", "column", "n", "n_placeholder", q)),
+    date_months = levels(profile$date_months),
+    id_shapes = levels(profile$id_shapes),
+    correlations = pick(profile$correlations, c("source", "scope", "var1", "var2", "rho")),
+    visit_pairs = pick(profile$visit_pairs, c("source", "family", "column", "rho")),
+    timing = pick(profile$timing, c("source", "label", "from", "to", q)),
+    omics_platform = pick(profile$omics_platform, c("source", "platform", "n_samples_source", "n_samples_profiled",
+                                                    "n_samples_t0", "n_samples_t1", "n_features", "transform",
+                                                    "layout", "value_column", "feature_column", "sample_column",
+                                                    "split")),
+    omics_features = pick(profile$omics_features, c("source", "platform", "feature", "share_missing", q)),
+    omics_samples = pick(profile$omics_samples, c("source", "platform", "stat", q),
+                         profile$omics_samples$source %in% generated & profile$omics_samples$stat == "library_size"),
+    omics_eigen = pick(profile$omics_eigen, c("source", "platform", "pc", "eigenvalue")),
+    omics_loadings = pick(profile$omics_loadings, c("source", "platform", "feature", paste0("pc", 1:10))),
+    omics_visit = pick(profile$omics_visit, c("source", "platform", "feature", "rho"))
+  )
+  structure(out, class = "react_clinical_profile")
 }
 
 .clinical_read_candidate <- function(path) {
@@ -179,6 +285,33 @@ react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROF
   numeric_cols <- setdiff(columns, .clinical_text_columns)
   data[numeric_cols] <- lapply(data[numeric_cols], as.numeric)
   data
+}
+
+# Replace the levels of categorical columns with neutral labels, from a
+# format such as "Site %02d", wherever the columns appear (every table and
+# stratum). Levels are numbered by descending overall count, then by their
+# total across strata, so the neutral labels keep no order from the original
+# ones; the original labels appear nowhere in the result. Used by the build
+# for labels the disclosure review asked to coarsen.
+.clinical_neutral_levels <- function(profile, formats) {
+  rows <- profile$categorical
+  key <- paste(rows$source, rows$table, rows$column, sep = "\r")
+  for (column in names(formats)) {
+    for (k in unique(key[rows$column == column])) {
+      at <- key == k
+      overall <- rows[at & rows$stratum_var == "all", , drop = FALSE]
+      levels <- unique(rows$level[at])
+      count <- overall$n_rows[match(levels, overall$level)]
+      count[is.na(count)] <- 0
+      total <- vapply(levels, function(l) sum(rows$n_rows[at & rows$level == l], na.rm = TRUE), numeric(1L))
+      ranked <- levels[order(-count, -total)]
+      neutral <- sprintf(formats[[column]], seq_along(ranked))
+      rows$level[at] <- neutral[match(rows$level[at], ranked)]
+      rows$level_order[at] <- match(rows$level[at], neutral)
+    }
+  }
+  profile$categorical <- rows
+  profile
 }
 
 .clinical_check_profile <- function(profile) {

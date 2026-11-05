@@ -1,0 +1,2 @@
+profile_release,profile_sha256,approval_status,approval_date,approval_confirmed_by,approval_scope,external_reference
+clinical-profile-v1,ac78e27a67c33630d14c28a1f5e29ae94efb18ced711af0821db45233d03eaf0,formally_approved,2026-11-05,mathzero,release of these exact profile bytes in the public package,not_supplied

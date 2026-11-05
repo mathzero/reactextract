@@ -30,7 +30,17 @@
   protein names, and placeholder dates appear at the counted rates. Tests use
   an invented candidate. `inst/CLINICAL_SYNTHETIC.md` sets out the design and
   what is still open.
-- Fidelity fixes found by validating synthetic output against the profile: availability flags are read from the
+- Adds `clinical-profile-v1` (formally approved for release on 5 November
+  2026), so `react_clinical()` and `react_clinical_omics()` work without a
+  local candidate: `react_clinical_profile()` returns it by default, after
+  checking its approval record and pinned SHA-256; a local candidate stays
+  available for development.
+  `scripts/clinical/` builds the profile from the kit's v1.2 candidate (only
+  what the generator reads, no counts below 10), validates synthetic output
+  against it and lists what becomes public for the disclosure review. Clinic
+  sites, vaccination providers' organisation codes and a kit lot number are
+  replaced by neutral labels.
+- Fidelity fixes found by the validation: availability flags are read from the
   kit's availability-pattern file; omics feature quantiles are used on their
   raw scale; numeric anchor shifts are mapped back to the overall quantiles;
   a blank cell within an anchor level keeps the level's overall share instead
