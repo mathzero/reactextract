@@ -1,0 +1,4 @@
+"source","label","from","to","n","mean_trimmed","n_zero","n_negative","share_integer","decimals","p01","p05","p10","p25","p50","p75","p90","p95","p99","n_code_m77","n_code_m91","n_code_m92","n_code_m99","n_code_m66","n_code_m555","n_code_m999"
+"wrangled","onset_to_registration","master:onset_date","master:reg_date",300,,,,1,0,,40,60,100,150,200,260,290,,,,,,,,
+"wrangled","registration_to_baseline","master:reg_date","clinic_data/clinical_tests/tests_t0:visit_date",300,,,,1,0,,5,8,12,20,30,45,55,,,,,,,,
+"wrangled","baseline_to_followup","clinic_data/clinical_tests/tests_t0:visit_date","clinic_data/clinical_tests/tests_t1:visit_date",60,,,,1,0,,160,170,180,195,215,235,245,,,,,,,,

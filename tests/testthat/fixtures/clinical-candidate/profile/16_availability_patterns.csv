@@ -1,0 +1,9 @@
+"source","table","column","stratum_var","stratum","level","level_order","n_rows","n_persons"
+"master","availability_patterns:main_cohort","baseline","all","all","has_bloods_t0+has_panel_t0",1,120,120
+"master","availability_patterns:main_cohort","baseline","all","all","has_bloods_t0+has_panel_t0+has_genome",2,55,55
+"master","availability_patterns:main_cohort","baseline","all","all","has_bloods_t0+has_rnaseq_t0+has_panel_t0",3,70,70
+"master","availability_patterns:main_cohort","baseline","all","all","has_bloods_t0",4,30,30
+"master","availability_patterns:main_cohort","baseline","all","all","has_bloods_t0+has_genome",5,,
+"master","availability_patterns:main_cohort","followup","all","all","(none)",1,240,240
+"master","availability_patterns:main_cohort","followup","all","all","has_bloods_t1+has_panel_t1",2,45,45
+"master","availability_patterns:main_cohort","followup","all","all","has_bloods_t1",3,15,15

@@ -1,0 +1,3 @@
+"source","table","column","n","n_placeholder","n_before_2019_12","n_after_run_date","p01","p05","p10","p25","p50","p75","p90","p95","p99"
+"wrangled","clinic_data/clinical_tests/tests_t1","visit_date",60,,,,,"2021-10","2021-10","2021-10","2021-11","2021-11","2021-12","2021-12",
+"wrangled","infection_log","onset_date",1000,100,,,,"2020-04","2020-04","2020-06","2020-10","2020-12","2021-01","2021-01",

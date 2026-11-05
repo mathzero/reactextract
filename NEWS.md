@@ -1,3 +1,53 @@
+# reactextract 0.6.0.9011 (development)
+
+- Starts the REACT Clinical Study generator (draft). `react_clinical()`
+  returns the Clinical Study's wrangled release, the nested list saved as
+  `ge_lc_wrangled.rds`: synthetic tables from `react_synthetic()`, or the real
+  list from the new `react_wrangled()` source, which can also be checked
+  against a profile's inventory. Synthetic tables copy the inventory's table
+  paths, column names, order and classes, including tables covering the whole
+  REACT study (generated for every synthetic person), a branch for registrants
+  who weren't REACT participants, tables whose row count is suppressed (no
+  rows) and date limits. The cohort is drawn from the source's synthetic
+  people, and each `subject_id` is a nine-digit number made from the person's
+  `SUBJECT_ID`. Values follow the profile's distributions within sex, age
+  group, long COVID group, main-cohort membership and the other anchors;
+  columns of one table follow its rank correlations; follow-up values are
+  correlated with baseline values; dates in different tables follow the
+  profiled intervals; tables of one visit nest; and placeholder dates are kept.
+- `react_clinical_omics()` returns synthetic omics files for the same cohort,
+  each shaped like the object read from the real file (proteomics tables in
+  wide, long and stacked layouts, metabolomics tables, tximport lists of
+  RNA-seq matrices, genotype and autoantibody tables). Samples go to people
+  with the matching availability flag; values follow each platform's low-rank
+  structure and feature quantiles, with tables of the same measurements
+  sharing values.
+- `react_clinical_profile()` reads one checked candidate of the clinical
+  inventory kit (v1.2) from a local folder (`REACTEXTRACT_CLINICAL_PROFILE`)
+  and records the kit version that wrote it; no profile is bundled until one
+  is approved. Long proteomics tables take the source files' column order,
+  proteomics reference tables (name lookup, summaries) hold the generated
+  protein names, and placeholder dates appear at the counted rates. Tests use
+  an invented candidate. `inst/CLINICAL_SYNTHETIC.md` sets out the design and
+  what is still open.
+- Adds `clinical-profile-v1` (formally approved for release on 5 November
+  2026), so `react_clinical()` and `react_clinical_omics()` work without a
+  local candidate: `react_clinical_profile()` returns it by default, after
+  checking its approval record and pinned SHA-256; a local candidate stays
+  available for development.
+  `scripts/clinical/` builds the profile from the kit's v1.2 candidate (only
+  what the generator reads, no counts below 10), validates synthetic output
+  against it and lists what becomes public for the disclosure review. Clinic
+  sites, vaccination providers' organisation codes and a kit lot number are
+  replaced by neutral labels.
+- Fidelity fixes found by the validation: availability flags are read from the
+  kit's availability-pattern file; omics feature quantiles are used on their
+  raw scale; numeric anchor shifts are mapped back to the overall quantiles;
+  a blank cell within an anchor level keeps the level's overall share instead
+  of counting as zero (complementary suppression can blank a common level);
+  follow-up values link to the baseline value's rank; and people outside the
+  cohort have missing anchors in population tables.
+
 # reactextract 0.6.0.9010 (development)
 
 - Adds an enclave kit, `inst/enclave/clinical-inventory-v1`, that inventories

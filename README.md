@@ -378,6 +378,16 @@ test results, symptoms and reported conditions have no effect. See
 [`inst/HES_SYNTHETIC.md`](inst/HES_SYNTHETIC.md) for what is and is not
 captured.
 
+## REACT Clinical Study (in development)
+
+`react_clinical()` returns the Clinical Study's wrangled release, the nested
+list saved as `ge_lc_wrangled.rds`: synthetic tables from `react_synthetic()`
+and the real list from `react_wrangled()`, with the same table paths, columns
+and types. `react_clinical_omics()` returns synthetic omics files for the same
+people. Both need a Clinical Study profile, and none is bundled yet, so they
+aren't ready for general use. See
+[`inst/CLINICAL_SYNTHETIC.md`](inst/CLINICAL_SYNTHETIC.md) for the design.
+
 ## What the synthetic data capture
 
 Synthetic records are generated round by round from the approved
