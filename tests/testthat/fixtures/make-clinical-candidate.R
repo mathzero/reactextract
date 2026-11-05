@@ -267,15 +267,6 @@ categorical <- rbind(
   cat_rows("carrier", "carrier", c("Yes", "No"), c(15, 30), source = "gene"),
   cat_rows("names_lookup", "origin", c("Panel_A", "Panel_Long"), c(6, 6), source = "panel"),
   cat_rows("protein_summary", "n_platforms", "2", 6, source = "panel"),
-  # availability patterns of the main cohort (combined_data_set's flags)
-  frame(source = "master", table = "availability_patterns:main_cohort", column = "baseline",
-        stratum_var = "all", stratum = "all",
-        level = c("has_bloods_t0+has_panel_t0", "has_bloods_t0+has_panel_t0+has_genome",
-                  "has_bloods_t0+has_rnaseq_t0+has_panel_t0", "has_bloods_t0", "has_bloods_t0+has_genome"),
-        level_order = 1:5, n_rows = c(120, 55, 70, 30, NA), n_persons = c(120, 55, 70, 30, NA)),
-  frame(source = "master", table = "availability_patterns:main_cohort", column = "followup",
-        stratum_var = "all", stratum = "all", level = c("(none)", "has_bloods_t1+has_panel_t1", "has_bloods_t1"),
-        level_order = 1:3, n_rows = c(240, 45, 15), n_persons = c(240, 45, 15)),
   # "Rarely" was suppressed (fewer than 10 people), so it is never generated
   cat_rows(reg, "fatigue", c("Never", "Rarely", "Sometimes", "Often"), c(150, NA, 120, 90)),
   cat_rows(reg, "fatigue", c("Never", "Rarely", "Sometimes", "Often"), c(80, NA, 40, 20), "lc_group", "None"),
@@ -324,7 +315,18 @@ put(rbind(
 
 empty_header <- "\"source\",\"table\",\"column\",\"stratum_var\",\"stratum\",\"level\",\"level_order\",\"n_rows\",\"n_persons\""
 writeLines(empty_header, file.path(out, "profile/15_availability.csv"))
-writeLines(empty_header, file.path(out, "profile/16_availability_patterns.csv"))
+# availability patterns of the main cohort (combined_data_set's flags), in
+# their own file as the kit writes them
+put(rbind(
+  frame(source = "master", table = "availability_patterns:main_cohort", column = "baseline",
+        stratum_var = "all", stratum = "all",
+        level = c("has_bloods_t0+has_panel_t0", "has_bloods_t0+has_panel_t0+has_genome",
+                  "has_bloods_t0+has_rnaseq_t0+has_panel_t0", "has_bloods_t0", "has_bloods_t0+has_genome"),
+        level_order = 1:5, n_rows = c(120, 55, 70, 30, NA), n_persons = c(120, 55, 70, 30, NA)),
+  frame(source = "master", table = "availability_patterns:main_cohort", column = "followup",
+        stratum_var = "all", stratum = "all", level = c("(none)", "has_bloods_t1+has_panel_t1", "has_bloods_t1"),
+        level_order = 1:3, n_rows = c(240, 45, 15), n_persons = c(240, 45, 15))
+), "profile/16_availability_patterns.csv")
 writeLines("\"\"", file.path(out, "profile/17_availability_pairs.csv"))
 put(frame(source = "wrangled", family = "clinical_tests", column = c("sys_bp", "dia_bp"),
           role = "continuous", n = 60, rho = c(0.8, 0.75), share_same = NA, mean_trimmed = NA,

@@ -43,7 +43,7 @@ test_that("files changed since the candidate was written are refused", {
   md5 <- unname(tools::md5sum(file.path(copy, "inventory/03_tables.csv")))
   utils::write.csv(data.frame(file = "inventory/03_tables.csv", md5 = md5),
                    file.path(copy, "manifest.csv"), row.names = FALSE)
-  expect_identical(nrow(react_clinical_profile(copy)$manifest), 1L)
+  expect_identical(nrow(react_clinical_profile(copy)$sources), 1L)
 })
 
 test_that("tables have the inventory's paths, column names, order and classes", {
@@ -380,3 +380,4 @@ test_that("follow-up omics samples are correlated with baseline samples", {
   expect_gt(stats::cor(base$f3, later$f3, method = "spearman"), 0.4)
   expect_error(react_clinical_omics(source, sources = "bloods", profile = profile), "Unknown or unprofiled omics source")
 })
+

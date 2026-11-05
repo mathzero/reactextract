@@ -1,14 +1,13 @@
 # Synthetic Clinical Study columns ------------------------------------------------
 
-# Pseudo-count that shrinks an anchor level's counts towards the overall
-# distribution, so suppressed (zero) cells lower a level's probability within
-# that anchor level without removing it
-.clinical_shrinkage <- 5
-
 # Draw categorical levels for rows with anchor labels `strata`, at
 # probabilities `u`. Level probabilities multiply the overall ones by each
 # anchor's within-level ratio (a log-linear model with no interactions).
-# Levels with no released overall count are never drawn.
+# Levels with no released overall count are never drawn. Within an anchor
+# level, a blank (suppressed) cell isn't evidence of a rare level: the kit's
+# complementary suppression can blank a common one. It keeps the level's
+# overall share, and the released cells share the rest in their proportions;
+# nothing is reconstructed.
 .clinical_draw_levels <- function(rows, strata, u) {
   overall <- rows[rows$stratum_var == "all", , drop = FALSE]
   overall <- overall[!is.na(overall$level), , drop = FALSE]
@@ -31,9 +30,14 @@
     part$n_rows[is.na(part$n_rows)] <- 0
     within <- tapply(part$n_rows, list(part$stratum, factor(part$level, levels = levels)), sum)
     within[is.na(within)] <- 0
-    shrunk <- (within + .clinical_shrinkage * rep(base, each = nrow(within))) /
-      (rowSums(within) + .clinical_shrinkage)
-    shift <- log(shrunk) - rep(log(base), each = nrow(shrunk))
+    released <- within > 0
+    blank_share <- as.vector((!released) %*% base)
+    base_matrix <- matrix(base, nrow(within), length(base), byrow = TRUE)
+    within_share <- within / pmax(rowSums(within), 1)
+    probability <- ifelse(released, within_share * (1 - blank_share), base_matrix)
+    probability[rowSums(released) == 0 | blank_share >= 1, ] <- base_matrix[rowSums(released) == 0 | blank_share >= 1, ]
+    shift <- log(probability) - log(base_matrix)
+    dimnames(shift) <- dimnames(within)
     label <- strata[[stratum_var]]
     matched <- label %in% rownames(shift)
     logp[matched, ] <- logp[matched, ] + shift[label[matched], , drop = FALSE]
@@ -64,8 +68,8 @@
 }
 
 # Numeric values at probabilities `u`: the overall quantile function plus
-# each anchor's shift from it at the same probability, clamped to the
-# overall range, then rounded and given missing codes as released
+# the anchors' shifts from it at the same probability, mapped back to the
+# overall quantiles by rank, then rounded and given missing codes as released
 .clinical_draw_numeric <- function(rows, strata, u) {
   overall <- rows[rows$stratum_var == "all", , drop = FALSE]
   if (nrow(overall) == 0L) return(NULL)
@@ -74,6 +78,8 @@
   quantile <- .clinical_quantile_fun(q_all)
   if (is.null(quantile)) return(NULL)
   x <- quantile(u)
+  shift <- numeric(length(u))
+  shifted <- FALSE
   for (stratum_var in intersect(setdiff(unique(rows$stratum_var), "all"), names(strata))) {
     part <- rows[rows$stratum_var == stratum_var, , drop = FALSE]
     label <- strata[[stratum_var]]
@@ -84,9 +90,16 @@
       keep <- !is.na(q)
       if (sum(keep) < 2L) next
       probs <- .clinical_quantile_probs[keep]
-      shift <- q[keep] - quantile(probs)
-      x[matched] <- x[matched] + stats::approx(probs, shift, xout = u[matched], rule = 2)$y
+      shift[matched] <- shift[matched] + stats::approx(probs, q[keep] - quantile(probs), xout = u[matched], rule = 2)$y
+      shifted <- TRUE
     }
+  }
+  if (shifted) {
+    # the anchors overlap (route, study and age group, for example), so their
+    # summed shifts overshoot; mapping the values back to the overall
+    # quantiles by rank keeps the overall distribution while the anchors set
+    # who is high or low (checked against the profile's anchored quantiles)
+    x <- quantile((rank(x + shift, ties.method = "first") - 0.5) / length(x))
   }
   x <- pmin(pmax(x, quantile(0)), quantile(1))
 
@@ -219,9 +232,9 @@
 # overrides it). Distributions come from `table$profile_table` in `source`.
 # `dates` holds person-level dates keyed "table:column" (from the timing
 # intervals). `baseline` links a follow-up table to its baseline: `u` holds
-# each person's baseline probability per column and `rho` the columns' rank
-# correlations between visits. Probabilities of the columns named in `keep`
-# are returned in the "latent" attribute, for a follow-up table to use.
+# the percentile of each person's baseline value per column and `rho` the
+# columns' rank correlations between visits. Percentiles of the columns named
+# in `keep` are returned in the "latent" attribute, for a follow-up table.
 # `only` limits the table to some of its columns.
 .clinical_table <- function(profile, table, people, rows, ids = list(), dates = list(), baseline = NULL,
                             keep = character(), source = .clinical_release_source, n = NULL, only = NULL) {
@@ -269,7 +282,6 @@
       z <- r * stats::qnorm(u0[linked]) + sqrt(1 - r^2) * stats::qnorm(u[linked])
       u[linked] <- stats::pnorm(z)
     }
-    if (name %in% keep) latent[, name] <- u
     value <- NULL
     if (!is.null(rows) && .clinical_is_person_key(name)) {
       key <- people$subject_id[rows]
@@ -305,6 +317,14 @@
     } else if (column$role == "free_text") {
       value <- rep("Synthetic free text", n)
     }
+    if (name %in% keep) {
+      # a follow-up table links to the baseline value's rank, which carries the
+      # anchors' effect as well as the column's own probability
+      levels <- categorical_rows$level[categorical_rows$column == name & categorical_rows$stratum_var == "all"]
+      levels <- levels[order(categorical_rows$level_order[categorical_rows$column == name &
+                                                            categorical_rows$stratum_var == "all"])]
+      latent[, name] <- if (is.null(value)) u else .clinical_percentile(value, levels)
+    }
     if (is.null(value)) {
       out[[i]] <- .clinical_na(class, n)
       next
@@ -327,6 +347,16 @@
   class(data) <- classes
   if (length(keep) > 0L) attr(data, "latent") <- list(rows = rows, u = latent)
   data
+}
+
+# Mid-rank percentiles of values (categorical values ranked by their level
+# order), for linking a follow-up value to its baseline value
+.clinical_percentile <- function(value, levels = character()) {
+  x <- if (is.character(value) && length(levels) > 0L) match(value, levels) else suppressWarnings(as.numeric(value))
+  ok <- !is.na(x)
+  out <- rep(NA_real_, length(x))
+  if (any(ok)) out[ok] <- (rank(x[ok], ties.method = "average") - 0.5) / sum(ok)
+  out
 }
 
 # The person key of a table: subject_id however it is written ("Subject ID")

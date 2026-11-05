@@ -206,12 +206,13 @@
     extra$subject_id <- rest$subject_id
     extra$sex_code <- rest$sex
     extra$age <- rest$age
-    extra$sex <- .clinical_sex_label(rest$sex, .clinical_stratum_labels(profile, "sex"))
-    extra$age_group <- .clinical_age_group(rest$age, .clinical_stratum_labels(profile, "age_group"))
-    anchors <- setdiff(names(main), c("SUBJECT_ID", "subject_id", "sex_code", "age", "sex", "age_group",
-                                      "main", "registrant", "followup",
-                                      grep("^rank_", names(main), value = TRUE)))
+    # the kit knows anchors only for registrants, so for everyone else they
+    # are "(missing)" (and main-cohort membership is "No")
+    anchors <- setdiff(names(main), c("SUBJECT_ID", "subject_id", "sex_code", "age", "main", "registrant",
+                                      "followup", grep("^rank_", names(main), value = TRUE)))
     for (anchor in anchors) extra[[anchor]] <- "(missing)"
+    not_main <- setdiff(.clinical_stratum_labels(profile, "main_cohort"), unique(main$main_cohort[main$main]))
+    if (length(not_main) > 0L) extra$main_cohort <- not_main[[1L]]
     extra$main <- FALSE
     extra$registrant <- FALSE
     extra$followup <- FALSE
@@ -352,8 +353,9 @@
 # per group of flags and person, in proportion to its count. Follow-up flags go
 # only to the follow-up group. Suppressed patterns count as zero.
 .clinical_flags <- function(profile, people) {
-  rows <- profile$categorical[startsWith(profile$categorical$table, "availability_patterns:") &
-                                profile$categorical$stratum_var == "all", , drop = FALSE]
+  columns <- c("table", "column", "stratum_var", "level", "n_rows")
+  rows <- rbind(profile$availability_patterns[columns], profile$categorical[columns])
+  rows <- rows[startsWith(rows$table, "availability_patterns:") & rows$stratum_var == "all", , drop = FALSE]
   rows$n_rows[is.na(rows$n_rows)] <- 0
   rows <- rows[rows$n_rows > 0, , drop = FALSE]
   flags <- setdiff(unique(unlist(strsplit(rows$level, "+", fixed = TRUE))), "(none)")

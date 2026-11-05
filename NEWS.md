@@ -30,6 +30,13 @@
   protein names, and placeholder dates appear at the counted rates. Tests use
   an invented candidate. `inst/CLINICAL_SYNTHETIC.md` sets out the design and
   what is still open.
+- Fidelity fixes found by validating synthetic output against the profile: availability flags are read from the
+  kit's availability-pattern file; omics feature quantiles are used on their
+  raw scale; numeric anchor shifts are mapped back to the overall quantiles;
+  a blank cell within an anchor level keeps the level's overall share instead
+  of counting as zero (complementary suppression can blank a common level);
+  follow-up values link to the baseline value's rank; and people outside the
+  cohort have missing anchors in population tables.
 
 # reactextract 0.6.0.9010 (development)
 

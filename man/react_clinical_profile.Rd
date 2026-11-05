@@ -12,8 +12,8 @@ react_clinical_profile(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROFILE"))
 \value{
 A \code{react_clinical_profile} object: a list of the kit's tables, the
 anchors, the kit version that wrote the candidate (from
-\verb{00_sources.csv}), the folder path and the candidate's manifest
-checksums.
+\verb{00_sources.csv}), the folder path and the candidate's files and
+checksums (\code{sources}).
 }
 \description{
 Reads the checked output of reactextract's clinical inventory kit

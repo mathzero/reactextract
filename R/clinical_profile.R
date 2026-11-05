@@ -4,7 +4,7 @@
 # structure files are required; files that are absent or empty give empty
 # tables, so candidates from earlier kit versions still read.
 .clinical_profile_files <- c(
-  sources = "inventory/00_sources.csv",
+  source_status = "inventory/00_sources.csv",
   source_issues = "inventory/00_source_issues.csv",
   context = "inventory/01_context.csv",
   structure = "inventory/02_structure.csv",
@@ -39,7 +39,7 @@
 
 # Columns the generator reads from each file
 .clinical_profile_required <- list(
-  sources = c("source", "status"),
+  source_status = c("source", "status"),
   context = c("key", "value"),
   structure = c("source", "path", "class", "n_rows", "n_cols"),
   tables = c("source", "table", "visit", "n_rows", "n_cols", "has_persons", "n_persons",
@@ -82,8 +82,8 @@
 #' @param path The candidate folder.
 #' @return A `react_clinical_profile` object: a list of the kit's tables, the
 #'   anchors, the kit version that wrote the candidate (from
-#'   `00_sources.csv`), the folder path and the candidate's manifest
-#'   checksums.
+#'   `00_sources.csv`), the folder path and the candidate's files and
+#'   checksums (`sources`).
 #' @export
 react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROFILE")) {
   if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
@@ -92,15 +92,16 @@ react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROF
          "profile/), or pass `path`.", call. = FALSE)
   }
   base <- .clinical_read_candidate(path)
-  kit <- if ("kit" %in% names(base$sources)) sort(unique(stats::na.omit(base$sources$kit))) else character()
-  version <- if (length(kit) == 0L) "unknown" else paste(kit, collapse = "+")
+  status <- base$source_status
+  kit <- if ("kit" %in% names(status)) sort(unique(stats::na.omit(status$kit))) else character()
+  kit <- if (length(kit) == 0L) "unknown" else paste(kit, collapse = "+")
 
   context <- base$context
   anchor_rows <- startsWith(context$key, "anchor:")
   anchors <- stats::setNames(context$value[anchor_rows], sub("^anchor:", "", context$key[anchor_rows]))
   structure(
     c(
-      list(version = version, status = "local_candidate", path = normalizePath(path), anchors = anchors),
+      list(version = kit, kit = kit, status = "local_candidate", path = normalizePath(path), anchors = anchors),
       base
     ),
     class = "react_clinical_profile"
@@ -110,7 +111,7 @@ react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROF
 .clinical_read_candidate <- function(path) {
   if (!dir.exists(path)) stop("Clinical profile folder not found: ", path, call. = FALSE)
   manifest_path <- file.path(path, "manifest.csv")
-  manifest <- data.frame(file = character(), md5 = character(), stringsAsFactors = FALSE)
+  manifest <- data.frame(file = character(), origin = character(), md5 = character(), stringsAsFactors = FALSE)
   if (file.exists(manifest_path)) {
     listed <- .clinical_read_csv(manifest_path)
     if (!all(c("file", "md5") %in% names(listed))) {
@@ -122,10 +123,10 @@ react_clinical_profile <- function(path = Sys.getenv("REACTEXTRACT_CLINICAL_PROF
       stop("Clinical profile file(s) missing or changed since the candidate was written: ",
            paste(changed, collapse = ", "), call. = FALSE)
     }
-    manifest <- data.frame(file = file.path(basename(normalizePath(path)), listed$file),
+    manifest <- data.frame(file = listed$file, origin = "clinical inventory candidate (local only)",
                            md5 = listed$md5, stringsAsFactors = FALSE)
   }
-  out <- list(manifest = manifest)
+  out <- list(sources = manifest)
   for (name in names(.clinical_profile_files)) {
     file <- file.path(path, .clinical_profile_files[[name]])
     required <- .clinical_profile_required[[name]]

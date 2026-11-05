@@ -71,14 +71,8 @@ bundles nothing from it:
   disclosure rules, not REACT content: table paths, column names and values
   are invented;
 - nothing from the candidate, including column names and counts, is
-  committed. The profile object records the folder path and manifest
-  checksums, and is marked `local_candidate`.
-
-Approval later follows the HES route: derive a compact profile, check that it
-has no counts below 10, write it to `inst/extdata/clinical-profile.rds` with an
-approval CSV, and pin its SHA-256 in the code. `react_clinical_profile()` then
-defaults to the bundled profile, and the environment variables become a
-development override.
+  committed. The profile object records the folder path and the candidate's
+  files and checksums, and is marked `local_candidate`.
 
 ## The wrangled list
 
@@ -138,7 +132,9 @@ so their counts are in that source's rows, which the generator reads. Each
 registrant gets all seven: sex and age group from the person; main-cohort
 membership for the right number of registrants (weighted by age group); the
 others drawn from their counts by age group, sex and main cohort. Anchor
-columns that appear in a table hold the person's anchor.
+columns that appear in a table hold the person's anchor. People in a
+population table who didn't register have "(missing)" anchors (and aren't in
+the main cohort), as in the kit, whose anchors exist only for registrants.
 
 **Membership.** Each table takes its people from one ranking per visit, so
 tables of a visit nest. The follow-up group is drawn from the main cohort,
@@ -161,12 +157,16 @@ one anchor at a time:
 
 - categorical columns: a person's level probabilities multiply the overall
   probabilities by each anchor's within-level ratio (a log-linear model with
-  no interactions). Within-level counts are shrunk towards the overall
-  distribution with a pseudo-count of 5;
-- numeric columns: the person's quantile function is the overall one plus
-  each anchor's shift from it at the same probability (the kit gives anchored
-  quantiles from p10 to p90; the shift is held flat beyond), clamped to the
-  overall range.
+  no interactions). Within an anchor level, a blank cell keeps the level's
+  overall share and the released cells share the rest (see Suppressed cells);
+- numeric columns: each anchor's shift from the overall quantile function at
+  the person's probability (the kit gives anchored quantiles from p10 to p90;
+  the shift is held flat beyond) is added, and the values are then mapped back
+  to the overall quantiles by rank. The anchors overlap (route, study and age
+  group, for example), so added shifts overshoot; mapping back keeps the
+  overall distribution while the anchors decide who is high or low. Checked
+  against the profile's anchored medians, adding the shifts this way fits
+  better than averaging them.
 
 **Within tables (`18_correlations.csv`).** Columns of one table with rank
 correlations are drawn from a Gaussian copula: Spearman's rho becomes a
@@ -179,7 +179,10 @@ names a path element; a follow-up table's baseline table is its path with
 `t1` changed to `t0`. For each column with a rank correlation, the follow-up
 normal score is `r × baseline score + sqrt(1 − r²) × its own score` (with `r`
 converted as above), so both the visit correlation and the follow-up table's
-own correlations are approximately kept. A follow-up table makes its baseline
+own correlations are approximately kept. The baseline score is that of the
+person's baseline *value* (its mid-rank percentile), which carries the
+anchors' effect: a column that follows an anchor at baseline but whose
+anchored cells are suppressed at follow-up still tracks the baseline value. A follow-up table makes its baseline
 table first, in that table's own random stream, so the same baseline is used
 whichever tables are requested.
 
@@ -234,9 +237,10 @@ z = sum over components k of sqrt(eigenvalue_k) × s_k × loading_k + e
 with `s_k` standard normal and `e` independent noise topping each feature up
 to variance one. A follow-up sample is correlated feature by feature with the
 same person's baseline sample (`36_omics_visit.csv`). Each feature's normal
-score is read through its quantiles (`31_omics_features.csv`), transformed
-back where the kit profiled `log2(x + 1)`, and set missing at the feature's
-share missing.
+score is read through its quantiles (`31_omics_features.csv`, which the kit
+computes on the raw values; its `log2(x + 1)` transform is only for the
+low-rank summary, which uses ranks), and set missing at the feature's share
+missing.
 
 **Shared measurements.** Platforms of one source with the same samples and
 features (raw and normalised values, the same measurements in wide and long
@@ -290,8 +294,11 @@ and shows labels only when 10 people share them. The generator:
   linear tails a quarter of the nearest step beyond the outermost one (and not
   below zero when no released quantile is negative). A column with fewer than
   two released quantiles is missing throughout;
-- falls back to the overall distribution where a whole anchor level is
-  suppressed;
+- within an anchor level, gives a blank cell the level's overall share and
+  rescales the released cells to the rest. Complementary suppression can blank
+  a common level within an anchor level, so a blank there isn't evidence of a
+  rare level; this uses no count that wasn't released. A whole anchor level
+  that is blank falls back to the overall distribution;
 - treats a blank `n_missing` in `04_columns.csv` as no missing values.
 
 ## Still open

@@ -59,7 +59,7 @@ react_clinical_omics <- function(source, sources = "all", profile = NULL, n = NU
 # Omics sources with something to generate (platforms, or person-level
 # tables) held in data frames or matrices; workbook folders are left out
 .clinical_omics_sources <- function(profile) {
-  omics <- profile$sources$source[profile$sources$group %in% "omics"]
+  omics <- profile$source_status$source[profile$source_status$group %in% "omics"]
   with_platforms <- unique(profile$omics_platform$source)
   with_tables <- unique(profile$tables$source[profile$tables$has_persons %in% TRUE])
   readable <- unique(profile$structure$source[grepl("data.frame|matrix", profile$structure$class)])
@@ -251,8 +251,7 @@ react_clinical_omics <- function(source, sources = "all", profile = NULL, n = NU
 }
 
 # Values of one platform's features at the group's probabilities (through
-# the group's feature map), transformed back where the kit profiled
-# log2(x + 1)
+# the group's feature map)
 .clinical_omics_values <- function(profile, platform, measure) {
   features <- .clinical_omics_features(profile, platform)
   at <- unname(measure$maps[[platform$platform]])
@@ -261,8 +260,9 @@ react_clinical_omics <- function(source, sources = "all", profile = NULL, n = NU
   for (j in seq_len(nrow(features))) {
     quantile <- .clinical_quantile_fun(unlist(features[j, .clinical_quantile_columns], use.names = FALSE))
     if (is.null(quantile)) next
+    # the kit's feature quantiles are of the raw values (its transform is only
+    # for the low-rank summary, which uses ranks)
     value <- quantile(measure$u[, at[[j]]])
-    if (identical(platform$transform, "log2p1")) value <- pmax(2^value - 1, 0)
     missing <- features$share_missing[[j]]
     if (!is.na(missing) && missing > 0) value[stats::runif(n) < missing] <- NA
     out[, j] <- value
