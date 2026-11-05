@@ -3,6 +3,18 @@
 This folder contains the first scripts to run after installing `reactextract`
 inside the REACT enclave.
 
+## Clinical Study inventory
+
+The [clinical inventory kit](clinical-inventory-v1/README.md) describes every
+dataset held for the REACT Clinical Study: the wrangled release from the
+clinical pipeline, the omics files (proteomics, metabolomics, lipids,
+transcriptomics, autoantibodies, genomics sample lists), later questionnaires,
+Cognitron and the linked NHS extracts. It reads files only, with no database
+connection, and writes an inventory and a disclosure-controlled profile for
+output checking. Its checked output is the input for the planned Clinical
+Study generator. Build the transfer zip with
+`Rscript scripts/build_clinical_inventory_kit.R`.
+
 ## Proposed v6 participation upgrade
 
 The [participation diagnostic kit](participation-v6/README.md) checks shared
