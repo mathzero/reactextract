@@ -1,3 +1,39 @@
+# reactextract 0.6.0.9010 (development)
+
+- Adds an enclave kit, `inst/enclave/clinical-inventory-v1`, that inventories
+  and profiles the REACT Clinical Study: every table in the wrangled release
+  from the clinical pipeline, the proteomics, metabolomics, lipid,
+  transcriptomics, autoantibody and genomics sample files, the later
+  questionnaires, Cognitron and the linked NHS extracts. It reads files only,
+  with no database connection. It writes an inventory (structure, sizes,
+  completeness) and a profile (quantiles, category counts, anchored summaries,
+  rank correlations, timing, availability patterns and omics structure). Both
+  are disclosure-controlled for output checking: counts below 10 suppressed
+  with complementary suppression, rounding to 5, no minima, maxima, means or
+  SDs, and labels only when shared by at least 10 people. A self-test runs the
+  kit on invented data and checks that no invented identifier, free text,
+  rare level or extreme value reaches the output.
+  `scripts/build_clinical_inventory_kit.R` writes the checksums and the
+  transfer zip. The package code is unchanged.
+- Clinical inventory kit v1.1 repairs the seven sources that stopped in the
+  first enclave run and adds two. Windows-1252 free text is converted on
+  reading. An error in one column, table or step is recorded and the rest is
+  still profiled. Proteomics tables use the column layouts declared in
+  `sources.R`, with raw and normalised values profiled separately. CSV column
+  names are repaired as `read_csv()` repairs them. RNA-seq samples are linked
+  to people through the manifests' BioSample names. The untargeted XCMS
+  metabolomics table and the APOE4 carrier file are new sources. A partial
+  run now keeps every other source's checkpoint and profiles failed sources
+  again. The v1.1 run profiles only these nine sources, and its export is a
+  supplement to the first candidate.
+- Clinical inventory kit v1.2 profiles every source afresh and writes one
+  candidate, which replaces the first candidate and the v1.1 supplement.
+  Checkpoints from earlier kit versions are never reused. Placeholder dates
+  are any date up to 1900-01-01 or in the year 9999, since the enclave's
+  SPSS zero dates didn't match the exact days v1.1 listed. The proteomics
+  lookup and QC tables are profiled as ordinary tables, and the column order
+  of long omics tables is recorded for the generator.
+
 # reactextract 0.6.0.9009 (development)
 
 - Documents how the synthetic relationships combine. Synthetic hospital records
