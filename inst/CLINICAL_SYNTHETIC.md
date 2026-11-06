@@ -1,9 +1,10 @@
-# Synthetic REACT Clinical Study data (draft design)
+# Synthetic REACT Clinical Study data
 
-Status: draft, 5 November 2026. The generator runs on the bundled profile
-`clinical-profile-v1` (formally approved for release on 5 November 2026), on
-a local inventory candidate (`clinical-inventory-v1.2`) for development, or on
-invented fixtures in the tests.
+Status: in reactextract 0.6.0.9011 (development) since 5 November 2026. The
+generator runs on the bundled profile `clinical-profile-v1` (formally approved
+for release on 5 November 2026), on a local inventory candidate
+(`clinical-inventory-v1.2`) for development, or on invented fixtures in the
+tests. [Still open](#still-open) lists what it doesn't generate yet.
 
 `react_clinical()` returns the REACT Clinical Study's wrangled release: the
 nested list that the canonical wrangling pipeline saves as
@@ -335,6 +336,3 @@ and shows labels only when 10 people share them. The generator:
   results.
 - **REACT-1/2 records.** The cohort's REACT-1/2 survey records are generated
   from their profile, not from `react_extract()` for the same people.
-- **Approval.** Build the compact profile, check it, and request approval for
-  bundling; then write a validation note comparing synthetic output with the
-  candidate's aggregates, as `scripts/hes/VALIDATION.md` does for HES.

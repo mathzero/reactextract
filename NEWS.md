@@ -1,6 +1,6 @@
 # reactextract 0.6.0.9011 (development)
 
-- Starts the REACT Clinical Study generator (draft). `react_clinical()`
+- Adds the REACT Clinical Study generator. `react_clinical()`
   returns the Clinical Study's wrangled release, the nested list saved as
   `ge_lc_wrangled.rds`: synthetic tables from `react_synthetic()`, or the real
   list from the new `react_wrangled()` source, which can also be checked
@@ -22,10 +22,10 @@
   with the matching availability flag; values follow each platform's low-rank
   structure and feature quantiles, with tables of the same measurements
   sharing values.
-- `react_clinical_profile()` reads one checked candidate of the clinical
-  inventory kit (v1.2) from a local folder (`REACTEXTRACT_CLINICAL_PROFILE`)
-  and records the kit version that wrote it; no profile is bundled until one
-  is approved. Long proteomics tables take the source files' column order,
+- `react_clinical_profile()` can also read one checked candidate of the
+  clinical inventory kit (v1.2) from a local folder
+  (`REACTEXTRACT_CLINICAL_PROFILE`) and records the kit version that wrote
+  it. Long proteomics tables take the source files' column order,
   proteomics reference tables (name lookup, summaries) hold the generated
   protein names, and placeholder dates appear at the counted rates. Tests use
   an invented candidate. `inst/CLINICAL_SYNTHETIC.md` sets out the design and

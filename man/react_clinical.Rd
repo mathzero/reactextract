@@ -63,11 +63,14 @@ classes, so code written on the synthetic tables runs on the real ones.
 Each synthetic \code{subject_id} is a nine-digit number made from the person's
 reactextract \code{SUBJECT_ID}.
 
-This is a first version. Values follow the profile's distributions within
-sex, age group, long COVID group, main-cohort membership and the other
-anchors, and columns of one table follow its rank correlations; a person's
-tables share their anchors and identifiers. Baseline to follow-up
-stability, availability patterns and timing between tables are not yet
-modelled. See \code{inst/CLINICAL_SYNTHETIC.md}. \strong{Synthetic data are for
-learning and writing code, not for findings.}
+Values follow the profile's distributions within sex, age group, long COVID
+group, main-cohort membership and the other anchors, and columns of one
+table follow its rank correlations; a person's tables share their anchors
+and identifiers. Follow-up values are correlated with the same person's
+baseline values, and dates in different tables follow the profile's
+intervals between them. Each main-cohort member also gets availability
+flags from the profile's patterns, which decide who has samples in
+\code{\link[=react_clinical_omics]{react_clinical_omics()}}. \code{inst/CLINICAL_SYNTHETIC.md} describes the design
+and what is not generated yet. \strong{Synthetic data are for learning and
+writing code, not for findings.}
 }
