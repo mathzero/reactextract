@@ -37,7 +37,7 @@ returns both representations.}
 \value{
 A \code{react_extract_result} list. In wide output, \code{data} is the main
 cleaned table and \code{raw_data} retains one column per exact source field.
-Concepts with at most one field per round use one concept column; genuine
+Concepts with at most one field per round use one concept column;
 multi-item concepts use separate \code{concept__field__EXACT_RAW_FIELD} columns.
 \code{column_dictionary}, \code{issues}, and \code{manifest} describe the result. Detailed
 \code{raw_values} and \code{harmonised_values} are included only for \code{output = "long"}

@@ -121,7 +121,7 @@ Rscript enclave/build_synthetic_profile_v5.R connection.R react-synthetic-profil
 ```
 
 The script queried changed distributions plus the small reviewed set of fields
-needed for the dependency tables and wrote aggregate counts only—never IDs or
+needed for the dependency tables and wrote aggregate counts only, never IDs or
 row-level data.
 
 ### Correcting the first returned v5 candidate

@@ -474,7 +474,7 @@
 - Bundles the shared harmonisation notes and exposes both the human-readable
   notes and exact reviewed decision tables from R.
 - Uses the full topic-prefixed concept ID for every one-column harmonised output.
-  Genuine multi-item columns use the consistent
+  Multi-item columns use the consistent
   `concept_id__field__EXACT_RAW_FIELD` form; contributing names remain in
   `column_dictionary` instead of making harmonised names unwieldy.
 
@@ -485,8 +485,8 @@
 - Keeps the 18 pre-existing-condition concepts on their approved scientific
   transforms; other concepts use transparent source-preserving coding from the
   shared wiki dictionary.
-- Uses one concept column when there is at most one field per round. Genuine
-  multi-item concepts retain separate `concept__field__EXACT_RAW_FIELD` component
+- Uses one concept column when there is at most one field per round.
+  Multi-item concepts retain separate `concept__field__EXACT_RAW_FIELD` component
   columns so simultaneous answers are never overwritten or arbitrarily
   coalesced.
 - Adds `column_dictionary` to explain every cleaned output column and its

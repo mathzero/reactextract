@@ -120,4 +120,4 @@ within each round, not a longitudinal cohort.
 
 The [Imperial REACT publication index](https://www.imperial.ac.uk/medicine/research-and-impact/groups/react-study/publications-/)
 provides the wider research context; the four sources above are selected links
-to relationships actually represented in this preview, not an exhaustive review.
+to relationships represented in this preview, not an exhaustive review.
