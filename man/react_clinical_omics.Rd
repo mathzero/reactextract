@@ -58,10 +58,12 @@ structure and feature quantiles; tables that hold the same measurements
 stacks several) share samples and values. A follow-up sample is correlated
 with the same person's baseline sample feature by feature.
 
-This is a first version, with known gaps listed in
-\code{inst/CLINICAL_SYNTHETIC.md}: the order of columns in long tables isn't
-known, RNA-seq matrices have only the profiled genes, and lookup tables
-that weren't profiled are left out. There is no real-data path: in the
-secure environment, read the files themselves. \strong{Synthetic data are for
-learning and writing code, not for findings.}
+Long tables take the source files' column order and classes, and reference
+tables without people (such as the proteomics name lookup) are generated
+from their profiles. Known gaps are listed in \code{inst/CLINICAL_SYNTHETIC.md}:
+for example, RNA-seq matrices have only the profiled genes, and their
+samples aren't linked to people because the sequencing manifests aren't
+generated. There is no real-data path: in the secure environment, read the
+files themselves. \strong{Synthetic data are for learning and writing code, not
+for findings.}
 }

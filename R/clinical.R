@@ -40,13 +40,16 @@ react_wrangled <- function(path) {
 #' Each synthetic `subject_id` is a nine-digit number made from the person's
 #' reactextract `SUBJECT_ID`.
 #'
-#' This is a first version. Values follow the profile's distributions within
-#' sex, age group, long COVID group, main-cohort membership and the other
-#' anchors, and columns of one table follow its rank correlations; a person's
-#' tables share their anchors and identifiers. Baseline to follow-up
-#' stability, availability patterns and timing between tables are not yet
-#' modelled. See `inst/CLINICAL_SYNTHETIC.md`. **Synthetic data are for
-#' learning and writing code, not for findings.**
+#' Values follow the profile's distributions within sex, age group, long COVID
+#' group, main-cohort membership and the other anchors, and columns of one
+#' table follow its rank correlations; a person's tables share their anchors
+#' and identifiers. Follow-up values are correlated with the same person's
+#' baseline values, and dates in different tables follow the profile's
+#' intervals between them. Each main-cohort member also gets availability
+#' flags from the profile's patterns, which decide who has samples in
+#' [react_clinical_omics()]. `inst/CLINICAL_SYNTHETIC.md` describes the design
+#' and what is not generated yet. **Synthetic data are for learning and
+#' writing code, not for findings.**
 #'
 #' @param source A source from [react_synthetic()] or [react_wrangled()].
 #' @param tables `"all"`, or paths in the list such as `"registration_data"`

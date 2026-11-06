@@ -1,6 +1,6 @@
 # reactextract 0.6.0.9011 (development)
 
-- Starts the REACT Clinical Study generator (draft). `react_clinical()`
+- Adds the REACT Clinical Study generator. `react_clinical()`
   returns the Clinical Study's wrangled release, the nested list saved as
   `ge_lc_wrangled.rds`: synthetic tables from `react_synthetic()`, or the real
   list from the new `react_wrangled()` source, which can also be checked
@@ -22,10 +22,10 @@
   with the matching availability flag; values follow each platform's low-rank
   structure and feature quantiles, with tables of the same measurements
   sharing values.
-- `react_clinical_profile()` reads one checked candidate of the clinical
-  inventory kit (v1.2) from a local folder (`REACTEXTRACT_CLINICAL_PROFILE`)
-  and records the kit version that wrote it; no profile is bundled until one
-  is approved. Long proteomics tables take the source files' column order,
+- `react_clinical_profile()` can also read one checked candidate of the
+  clinical inventory kit (v1.2) from a local folder
+  (`REACTEXTRACT_CLINICAL_PROFILE`) and records the kit version that wrote
+  it. Long proteomics tables take the source files' column order,
   proteomics reference tables (name lookup, summaries) hold the generated
   protein names, and placeholder dates appear at the counted rates. Tests use
   an invented candidate. `inst/CLINICAL_SYNTHETIC.md` sets out the design and
@@ -474,7 +474,7 @@
 - Bundles the shared harmonisation notes and exposes both the human-readable
   notes and exact reviewed decision tables from R.
 - Uses the full topic-prefixed concept ID for every one-column harmonised output.
-  Genuine multi-item columns use the consistent
+  Multi-item columns use the consistent
   `concept_id__field__EXACT_RAW_FIELD` form; contributing names remain in
   `column_dictionary` instead of making harmonised names unwieldy.
 
@@ -485,8 +485,8 @@
 - Keeps the 18 pre-existing-condition concepts on their approved scientific
   transforms; other concepts use transparent source-preserving coding from the
   shared wiki dictionary.
-- Uses one concept column when there is at most one field per round. Genuine
-  multi-item concepts retain separate `concept__field__EXACT_RAW_FIELD` component
+- Uses one concept column when there is at most one field per round.
+  Multi-item concepts retain separate `concept__field__EXACT_RAW_FIELD` component
   columns so simultaneous answers are never overwritten or arbitrarily
   coalesced.
 - Adds `column_dictionary` to explain every cleaned output column and its

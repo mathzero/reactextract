@@ -11,8 +11,9 @@ clinical pipeline, the omics files (proteomics, metabolomics, lipids,
 transcriptomics, autoantibodies, genomics sample lists), later questionnaires,
 Cognitron and the linked NHS extracts. It reads files only, with no database
 connection, and writes an inventory and a disclosure-controlled profile for
-output checking. Its checked output is the input for the planned Clinical
-Study generator. Build the transfer zip with
+output checking. Its checked v1.2 output is what `clinical-profile-v1`, the
+profile behind `react_clinical()` and `react_clinical_omics()`, is built from.
+Build the transfer zip with
 `Rscript scripts/build_clinical_inventory_kit.R`.
 
 ## Proposed v6 participation upgrade
@@ -121,7 +122,7 @@ Rscript enclave/build_synthetic_profile_v5.R connection.R react-synthetic-profil
 ```
 
 The script queried changed distributions plus the small reviewed set of fields
-needed for the dependency tables and wrote aggregate counts only—never IDs or
+needed for the dependency tables and wrote aggregate counts only, never IDs or
 row-level data.
 
 ### Correcting the first returned v5 candidate

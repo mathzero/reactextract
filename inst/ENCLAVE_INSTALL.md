@@ -56,7 +56,7 @@ react_write_enclave_report(preflight, "reactextract-acceptance/preflight")
 
 Normal extractions default to the efficient wide `data` and `raw_data` tables.
 Use `output = "long"` only for specialist typed-value work, or `output = "both"`
-when both representations are genuinely required.
+when both representations are required.
 
 The offline bundle also includes `DERIVED_VARIABLES.md`. It documents the
 `react_derive_*()` functions for adding established PCR positivity

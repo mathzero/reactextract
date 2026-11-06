@@ -521,7 +521,7 @@
 #'   returns both representations.
 #' @return A `react_extract_result` list. In wide output, `data` is the main
 #'   cleaned table and `raw_data` retains one column per exact source field.
-#'   Concepts with at most one field per round use one concept column; genuine
+#'   Concepts with at most one field per round use one concept column;
 #'   multi-item concepts use separate `concept__field__EXACT_RAW_FIELD` columns.
 #'   `column_dictionary`, `issues`, and `manifest` describe the result. Detailed
 #'   `raw_values` and `harmonised_values` are included only for `output = "long"`

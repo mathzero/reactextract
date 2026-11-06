@@ -4,8 +4,8 @@ Version: 0.6.0.9011
 Authors@R: person("mathzero", email = "mathzero@users.noreply.github.com", role = c("aut", "cre"))
 Description: Generates fictional, disclosure-safe REACT-1 and REACT-2 survey
     data with the same variables, coding, questionnaire routing and cleaning as
-    the real study data, from a checksum-pinned, disclosure-approved aggregate
-    profile. It also generates fictional linked Hospital Episode Statistics for
+    the real study data, from an aggregate profile that passed disclosure
+    review and is pinned by checksum. It also generates fictional linked Hospital Episode Statistics for
     the synthetic participants. Researchers and students can learn the data and
     develop analysis code outside the secure environment. Inside it, the same
     extraction interface reads the real data from caller-managed Oracle

@@ -137,7 +137,7 @@ The default `output = "wide"` returns compact, analysis-ready tables:
 | `issues` | Unavailable fields, unexpected codes, fallbacks and partial failures |
 | `manifest` | Package, dictionary, source, request, counts and timings |
 
-Detailed typed values are available when genuinely needed:
+Detailed typed values are available when you need them:
 
 ```r
 long_result <- react_extract(source, output = "long")  # raw_values and harmonised_values only
