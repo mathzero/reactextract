@@ -1,106 +1,74 @@
-# reactextract 0.6.0.9011 (development)
+# reactextract 0.7.0
 
-- Starts the REACT Clinical Study generator (draft). `react_clinical()`
-  returns the Clinical Study's wrangled release, the nested list saved as
-  `ge_lc_wrangled.rds`: synthetic tables from `react_synthetic()`, or the real
-  list from the new `react_wrangled()` source, which can also be checked
-  against a profile's inventory. Synthetic tables copy the inventory's table
-  paths, column names, order and classes, including tables covering the whole
-  REACT study (generated for every synthetic person), a branch for registrants
-  who weren't REACT participants, tables whose row count is suppressed (no
-  rows) and date limits. The cohort is drawn from the source's synthetic
-  people, and each `subject_id` is a nine-digit number made from the person's
-  `SUBJECT_ID`. Values follow the profile's distributions within sex, age
-  group, long COVID group, main-cohort membership and the other anchors;
-  columns of one table follow its rank correlations; follow-up values are
-  correlated with baseline values; dates in different tables follow the
-  profiled intervals; tables of one visit nest; and placeholder dates are kept.
-- `react_clinical_omics()` returns synthetic omics files for the same cohort,
-  each shaped like the object read from the real file (proteomics tables in
-  wide, long and stacked layouts, metabolomics tables, tximport lists of
-  RNA-seq matrices, genotype and autoantibody tables). Samples go to people
+The first release since 0.5.6. It brings together development versions
+0.6.0.9003 to 0.6.0.9011. The approved `v5` profile remains the default for
+REACT-1/2.
+
+## Synthetic REACT Clinical Study
+
+- Adds `react_clinical()`, which returns the Clinical Study's wrangled release,
+  the nested list saved as `ge_lc_wrangled.rds`: synthetic tables from
+  `react_synthetic()`, or the real list from the new `react_wrangled()` source,
+  which can also be checked against a profile's inventory. Synthetic tables
+  copy the inventory's table paths, column names, order and classes, including
+  tables covering the whole REACT study (generated for every synthetic
+  person), a branch for registrants who weren't REACT participants, tables
+  whose row count is suppressed (no rows) and date limits. The cohort is drawn
+  from the source's synthetic people, and each `subject_id` is a nine-digit
+  number made from the person's `SUBJECT_ID`. Values follow the profile's
+  distributions within sex, age group, long COVID group, main-cohort membership
+  and the other anchors; columns of one table follow its rank correlations;
+  follow-up values are correlated with baseline values; dates in different
+  tables follow the profiled intervals; tables of one visit nest; and
+  placeholder dates are kept.
+- Adds `react_clinical_omics()`, which returns synthetic omics files for the
+  same cohort, each shaped like the object read from the real file (proteomics
+  tables in wide, long and stacked layouts, metabolomics tables, tximport lists
+  of RNA-seq matrices, genotype and autoantibody tables). Samples go to people
   with the matching availability flag; values follow each platform's low-rank
   structure and feature quantiles, with tables of the same measurements
   sharing values.
-- `react_clinical_profile()` reads one checked candidate of the clinical
-  inventory kit (v1.2) from a local folder (`REACTEXTRACT_CLINICAL_PROFILE`)
-  and records the kit version that wrote it; no profile is bundled until one
-  is approved. Long proteomics tables take the source files' column order,
-  proteomics reference tables (name lookup, summaries) hold the generated
-  protein names, and placeholder dates appear at the counted rates. Tests use
-  an invented candidate. `inst/CLINICAL_SYNTHETIC.md` sets out the design and
-  what is still open.
-- Adds `clinical-profile-v1` (formally approved for release on 5 November
-  2026), so `react_clinical()` and `react_clinical_omics()` work without a
-  local candidate: `react_clinical_profile()` returns it by default, after
-  checking its approval record and pinned SHA-256; a local candidate stays
-  available for development.
-  `scripts/clinical/` builds the profile from the kit's v1.2 candidate (only
+- Bundles `clinical-profile-v1`, formally approved for release on 5 November
+  2026. `react_clinical_profile()` returns it by default, after checking its
+  approval record and pinned SHA-256, so `react_clinical()` and
+  `react_clinical_omics()` need no local files. A checked candidate of the
+  clinical inventory kit (v1.2) can still be read from a local folder
+  (`REACTEXTRACT_CLINICAL_PROFILE`) for development, and the kit version that
+  wrote it is recorded. Long proteomics tables take the source files' column
+  order, proteomics reference tables (name lookup, summaries) hold the
+  generated protein names, and placeholder dates appear at the counted rates.
+- `scripts/clinical/` builds the profile from the kit's v1.2 candidate (only
   what the generator reads, no counts below 10), validates synthetic output
   against it and lists what becomes public for the disclosure review. Clinic
   sites, vaccination providers' organisation codes and a kit lot number are
-  replaced by neutral labels.
+  replaced by neutral labels. Tests use an invented candidate.
+  `inst/CLINICAL_SYNTHETIC.md` sets out the design and what is still open.
 - Fidelity fixes found by the validation: availability flags are read from the
   kit's availability-pattern file; omics feature quantiles are used on their
-  raw scale; numeric anchor shifts are mapped back to the overall quantiles;
-  a blank cell within an anchor level keeps the level's overall share instead
-  of counting as zero (complementary suppression can blank a common level);
+  raw scale; numeric anchor shifts are mapped back to the overall quantiles; a
+  blank cell within an anchor level keeps the level's overall share instead of
+  counting as zero (complementary suppression can blank a common level);
   follow-up values link to the baseline value's rank; and people outside the
   cohort have missing anchors in population tables.
 
-# reactextract 0.6.0.9010 (development)
+## Synthetic linked HES
 
-- Adds an enclave kit, `inst/enclave/clinical-inventory-v1`, that inventories
-  and profiles the REACT Clinical Study: every table in the wrangled release
-  from the clinical pipeline, the proteomics, metabolomics, lipid,
-  transcriptomics, autoantibody and genomics sample files, the later
-  questionnaires, Cognitron and the linked NHS extracts. It reads files only,
-  with no database connection. It writes an inventory (structure, sizes,
-  completeness) and a profile (quantiles, category counts, anchored summaries,
-  rank correlations, timing, availability patterns and omics structure). Both
-  are disclosure-controlled for output checking: counts below 10 suppressed
-  with complementary suppression, rounding to 5, no minima, maxima, means or
-  SDs, and labels only when shared by at least 10 people. A self-test runs the
-  kit on invented data and checks that no invented identifier, free text,
-  rare level or extreme value reaches the output.
-  `scripts/build_clinical_inventory_kit.R` writes the checksums and the
-  transfer zip. The package code is unchanged.
-- Clinical inventory kit v1.1 repairs the seven sources that stopped in the
-  first enclave run and adds two. Windows-1252 free text is converted on
-  reading. An error in one column, table or step is recorded and the rest is
-  still profiled. Proteomics tables use the column layouts declared in
-  `sources.R`, with raw and normalised values profiled separately. CSV column
-  names are repaired as `read_csv()` repairs them. RNA-seq samples are linked
-  to people through the manifests' BioSample names. The untargeted XCMS
-  metabolomics table and the APOE4 carrier file are new sources. A partial
-  run now keeps every other source's checkpoint and profiles failed sources
-  again. The v1.1 run profiles only these nine sources, and its export is a
-  supplement to the first candidate.
-- Clinical inventory kit v1.2 profiles every source afresh and writes one
-  candidate, which replaces the first candidate and the v1.1 supplement.
-  Checkpoints from earlier kit versions are never reused. Placeholder dates
-  are any date up to 1900-01-01 or in the year 9999, since the enclave's
-  SPSS zero dates didn't match the exact days v1.1 listed. The proteomics
-  lookup and QC tables are profiled as ordinary tables, and the column order
-  of long omics tables is recorded for the generator.
-
-# reactextract 0.6.0.9009 (development)
-
-- Documents how the synthetic relationships combine. Synthetic hospital records
-  depend only on age and sex, so test results, symptoms and reported conditions
-  have no effect on them. Because conditions, outcomes and hospital records all
-  depend on age, crude comparisons between them differ (people reporting
-  diabetes have more admissions) until age and sex are allowed for. The README,
-  `inst/HES_SYNTHETIC.md` and `inst/CONDITION_AGE_GRADIENTS.md` give an
-  example, and the README no longer says conditions and test results show only
-  chance differences.
+- Adds `react_hes()`, which returns REACT's linked Hospital Episode Statistics
+  (admitted patient care and outpatients) for a set of participants. With
+  `react_synthetic()` it generates fictional records with the real tables'
+  columns and types. They are calibrated to aggregates of REACT's linked HES,
+  with diagnoses and procedures by age and sex from national HES statistics.
+  With `react_oracle()` it queries the real `NHSE_HES_*` tables for the
+  participants' `SUBJECT_ID`s. The profile (`hes-profile-v1`) is
+  checksum-pinned and formally approved (29 October 2026); it is not loaded
+  without its approval record. See `inst/HES_SYNTHETIC.md`; the build scripts
+  are in `scripts/hes/`.
 - The advanced guide covers `react_hes()` with real data and the HES profile;
   the enclave installation guide adds a one-off check that real HES column
-  types match the synthetic tables. The README and advanced guide credit the
-  Open Government Licence sources of the condition gradients, and the package
-  description mentions linked HES.
+  types match the synthetic tables. The package description mentions linked
+  HES.
 
-# reactextract 0.6.0.9008 (development)
+## Condition age and sex gradients
 
 - Synthetic pre-existing conditions (`health.preexisting.*`) now depend on age
   and, for diabetes, heart disease, high blood pressure, stroke, cancer,
@@ -126,19 +94,23 @@
   `inst/CONDITION_AGE_GRADIENTS.md`. The extraction manifest records each
   round's calibration. The development profile and the experimental `v6`
   preview are unchanged.
+- Documents how the synthetic relationships combine. Synthetic hospital records
+  depend only on age and sex, so test results, symptoms and reported conditions
+  have no effect on them. Because conditions, outcomes and hospital records all
+  depend on age, crude comparisons between them differ (people reporting
+  diabetes have more admissions) until age and sex are allowed for. The README,
+  `inst/HES_SYNTHETIC.md` and `inst/CONDITION_AGE_GRADIENTS.md` give an
+  example, and the README no longer says conditions and test results show only
+  chance differences. The README and advanced guide credit the Open Government
+  Licence sources of the gradients.
 
-# reactextract 0.6.0.9007 (development)
+## Student-release changes
 
-- Adds `react_hes()`, which returns REACT's linked Hospital Episode Statistics
-  (admitted patient care and outpatients) for a set of participants. With
-  `react_synthetic()` it generates fictional records with the real tables'
-  columns and types. They are calibrated to aggregates of REACT's linked HES,
-  with diagnoses and procedures by age and sex from national HES statistics.
-  With `react_oracle()` it queries the real `NHSE_HES_*` tables for the
-  participants' `SUBJECT_ID`s. The profile (`hes-profile-v1`) is
-  checksum-pinned and formally approved (29 October 2026); it is not loaded
-  without its approval record. See `inst/HES_SYNTHETIC.md`; the build scripts
-  are in `scripts/hes/`.
+- `react_synthetic_profile()` and `react_synthetic()` now default to the
+  approved `v5` profile. The `v6` participation preview is opt-in via
+  `version = "v6"`, shows a one-time notice and is labelled experimental: it
+  produces implausible distributions for several key variables (for example
+  ethnicity, deprivation quintile, smoking, country of birth and gender).
 - Lowers the minimum R version from 4.4.0 to 4.1.0, so the package installs on
   older R installations such as university HPC environments. No code needed
   R 4.4; the earlier floor dated from the original pin to R 4.4.x. CI now also
@@ -154,20 +126,15 @@
   `result$raw_data` or the whole extraction result.
 - Adds `react_short_names()`, which drops topic prefixes from cleaned column
   names (for example `people_households.demographics.gender` becomes `gender`).
-- `react_extract()` on a synthetic source created for only some rounds now
-  returns those rounds by default, instead of failing with "subscript out of
-  bounds". Explicitly requesting a round without records gives a clear error.
 - Rewrites the README for students and researchers new to REACT: the
   synthetic-then-real workflow, the REACT studies, installation, a quick start,
   choosing variables, reading the result, derived variables, moving an analysis
-  to the real data and what synthetic data do and do not capture. Real-data extraction,
-  file sources, output options and harmonisation move to
+  to the real data and what synthetic data do and do not capture. Real-data
+  extraction, file sources, output options and harmonisation move to
   `inst/ADVANCED_GUIDE.md`, which is also added to the offline bundle.
-- `react_synthetic_profile()` and `react_synthetic()` now default to the
-  approved `v5` profile. The `v6` participation preview is opt-in via
-  `version = "v6"`, shows a one-time notice and is labelled experimental: it
-  produces implausible distributions for several key variables (for example
-  ethnicity, deprivation quintile, smoking, country of birth and gender).
+- `react_extract()` on a synthetic source created for only some rounds now
+  returns those rounds by default, instead of failing with "subscript out of
+  bounds". Explicitly requesting a round without records gives a clear error.
 - Fixes silent truncation of the bundled dictionary and synthetic-rule tables in
   a C/ASCII locale, which is common in batch jobs. Previously only a handful of
   rows were read, with a warning but no error.
@@ -189,50 +156,78 @@
   country of birth, smoking, deprivation, PCR and IgG positivity), so that a
   profile with permuted or collapsed categories fails the test suite.
 
-# reactextract 0.6.0.9005 (development preview)
+## Enclave kit: clinical inventory
 
-- Integrates checksum-pinned, user-approved models for all 25 rounds. Conditional
-  context, exact symptom and Ct draws feed the existing raw/harmonised pipeline.
-- Preserves suppressed cells as unknown, using explicit baseline fallbacks, not
-  zero counts or reconstruction. Published supports receive a 1% public prior.
-- Reapplies participation/eligibility after writes; keeps age/shared participation
-  anchored and jointly generates antibody result/completion branches. Records
-  Ct consistency repairs and all fallback counts.
-- Adds model integrity, all-round routing, output and deterministic-selection
-  tests. The explicit v5 profile remains unchanged.
-- This remains a development preview: held rules, product/timing effects, joint
-  symptom patterns and exact reproduction of all group distributions are not
-  claimed. Narrow requests now generate fixed full-round context internally.
+- Adds an enclave kit, `inst/enclave/clinical-inventory-v1`, that inventories
+  and profiles the REACT Clinical Study: every table in the wrangled release
+  from the clinical pipeline, the proteomics, metabolomics, lipid,
+  transcriptomics, autoantibody and genomics sample files, the later
+  questionnaires, Cognitron and the linked NHS extracts. It reads files only,
+  with no database connection. It writes an inventory (structure, sizes,
+  completeness) and a profile (quantiles, category counts, anchored summaries,
+  rank correlations, timing, availability patterns and omics structure). Both
+  are disclosure-controlled for output checking: counts below 10 suppressed
+  with complementary suppression, rounding to 5, no minima, maxima, means or
+  SDs, and labels only when shared by at least 10 people. A self-test runs the
+  kit on invented data and checks that no invented identifier, free text,
+  rare level or extreme value reaches the output.
+  `scripts/build_clinical_inventory_kit.R` writes the checksums and the
+  transfer zip.
+- Kit v1.1 repaired the seven sources that stopped in the first enclave run
+  and added two. Windows-1252 free text is converted on reading. An error in
+  one column, table or step is recorded and the rest is still profiled.
+  Proteomics tables use the column layouts declared in `sources.R`, with raw
+  and normalised values profiled separately. CSV column names are repaired as
+  `read_csv()` repairs them. RNA-seq samples are linked to people through the
+  manifests' BioSample names. The untargeted XCMS metabolomics table and the
+  APOE4 carrier file are new sources. A partial run keeps every other
+  source's checkpoint and profiles failed sources again.
+- The kit in this release is v1.2, which profiles every source afresh and
+  writes one candidate, replacing the first candidate and the v1.1 supplement.
+  Checkpoints from earlier kit versions are never reused. Placeholder dates
+  are any date up to 1900-01-01 or in the year 9999, since the enclave's SPSS
+  zero dates didn't match the exact days v1.1 listed. The proteomics lookup
+  and QC tables are profiled as ordinary tables, and the column order of long
+  omics tables is recorded for the generator. Its candidate is the source of
+  `clinical-profile-v1`.
 
-# reactextract 0.6.0.9004 (development preview)
+## Experimental `v6` participation preview
 
-- Adds the approved D13 modelling assumption for shared questionnaire nonresponse
-  explicitly labelled `below_10`: five cases divided by the approved rounded
-  whole-round population, not five cases in each synthetic sample.
-- Distinguishes primary small-cell suppression from complementary/other
-  withholding. An unavailable or invalid denominator leaves the rate unestimated.
-- Records assumed rates, 0–9 count bounds with denominator rounding, denominator
-  provenance and the stable-snapshot assumption in the manifest and issues.
-- Keeps protected profile files, empirical-availability flags and all other
-  missing-count treatment unchanged. REACT-1 released-rate generation and the
-  explicit v5 model remain unchanged. Old cached preview profiles must be reloaded
-  so the changed modelling policy is not applied silently.
-- Does not resolve participation/outcome calibration or infer all true REACT-2
-  questionnaire nonresponse from the conservative shared-state definition.
+These changes affect only `version = "v6"`, which stays experimental.
 
-# reactextract 0.6.0.9003 (development preview)
+- Stores 197 question rules and 109 option restrictions as 20 reusable
+  condition patterns in one checksum-pinned bundle shared with the REACT wiki,
+  including the 77 approved work, travel and contact restrictions. Three held
+  Round 15 quarantine options remain excluded; no restrictions are copied to
+  unrelated ordinary leaving-home questions or the changed Round 19 section.
+  One controlled condition evaluator applies option restrictions before their
+  downstream questions.
+- Adds the approved D13 modelling assumption for shared questionnaire
+  nonresponse labelled `below_10`: five cases divided by the approved rounded
+  whole-round population, not five cases in each synthetic sample. Primary
+  small-cell suppression is distinguished from complementary withholding, and
+  an unavailable or invalid denominator leaves the rate unestimated. Assumed
+  rates, count bounds and denominator provenance are recorded in the manifest.
+- Integrates checksum-pinned, user-approved models for all 25 rounds.
+  Suppressed cells are kept as unknown, using explicit baseline fallbacks, not
+  zero counts or reconstruction; published supports receive a 1% public prior.
+  Participation and eligibility are reapplied after writes, and Ct consistency
+  repairs and fallback counts are recorded.
+- Held rules, product and timing effects, joint symptom patterns, REACT-2
+  shared participation and outcome calibration remain unresolved.
 
-- Stores 197 question rules and 109 option restrictions as 20 reusable condition
-  patterns in one checksum-pinned bundle shared with the REACT wiki. Full evidence
-  stays in the wiki; no extra dependencies or public API changes.
-- Adds the 77 approved work/travel/contact restrictions. Three held Round 15
-  quarantine options remain excluded; no restrictions are copied to unrelated
-  ordinary leaving-home questions or the changed Round 19 section.
-- Uses one controlled condition evaluator and applies option restrictions before
-  their downstream questions. Shared questionnaire non-response retains priority.
-- Keeps explicit v5 generation reproducible and leaves enclave helper kits intact.
-- This remains a participation preview, not the final 0.6.0 model; held rules,
-  unestimated REACT-2 shared participation and outcome calibration remain visible.
+## Known issues
+
+- Synthetic weights recorded in stones and pounds (`WEIGHT_S`, `WEIGHT_P`) are
+  implausible: they are not whole numbers, pounds are not limited to 0–13 and
+  a few values run to tens of thousands. BMI from `react_derive_bmi()` is
+  therefore implausible for the rows that use them. Use synthetic BMI only to
+  test code.
+- `react_derive_household_size()` warns on synthetic data that some rows
+  populate both routed household-count alternatives (`NADULTS` and
+  `NADULTS1`, or `NCHILD` and `NCHILD1`), because the generator fills both
+  routes for a few per cent of REACT-1 rows. On synthetic data the warning
+  can be ignored; on real data, check those rows before analysis.
 
 # reactextract 0.5.6
 
